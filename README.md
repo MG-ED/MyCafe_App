@@ -1,4 +1,22 @@
-# Welcome to your Expo app 👋
+# MyCafe 👋
+
+## App Name
+
+MyCafe
+
+## ✨ Short Description
+
+MyCafe is a simple and easy-to-use mobile app designed to help café owners manage customer orders and streamline daily operations. It makes order tracking faster, more organized, and hassle-free.
+
+## ⚠️ Problem Statement
+
+Many café businesses still rely on manual processes such as writing down customer orders, calculating totals by hand, and tracking daily sales on paper. These traditional methods are time-consuming and prone to errors, such as incorrect orders, miscalculations, and lost records. As a result, operations become inefficient during busy hours, leading to delays, customer dissatisfaction, and difficulty in monitoring business performance.
+
+## 🎯 Target Users
+
+The primary users of MyCafe are café owners and small café business operators who want a more organized way to manage their daily transactions and operations.
+
+---
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
