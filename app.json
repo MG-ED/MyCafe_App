@@ -4,38 +4,33 @@
     "slug": "MyCAFE",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/MyCafe_Logo.png",
     "scheme": "mycafe",
-    "userInterfaceStyle": "automatic",
+
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FDF6EC",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/MyCafe_Logo.png",
+        "backgroundImage": "./assets/MyCafe_Logo.png",
+        "monochromeImage": "./assets/MyCafe_Logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/MyCafe_Logo.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/MyCafe_Logo.png",
           "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#FDF6EC",
-          "dark": {
-            "backgroundColor": "#3E1F0D"
-          }
+          "resizeMode": "contain"
         }
       ]
     ],
