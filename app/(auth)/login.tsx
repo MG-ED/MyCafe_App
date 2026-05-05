@@ -119,13 +119,6 @@ export default function LoginScreen() {
             <Text style={styles.subtitle}>Log in to your MyCafe account</Text>
           </View>
 
-          {/* Firebase badge */}
-          <View style={styles.firebaseBadge}>
-            <Text style={styles.firebaseText}>
-              🔒 Secured by Firebase Authentication
-            </Text>
-          </View>
-
           {/* Form */}
           <View style={styles.form}>
             {/* Email */}
@@ -137,7 +130,7 @@ export default function LoginScreen() {
                   errors.email ? styles.inputError : null,
                 ]}
               >
-                <Text style={styles.inputIcon}>📧</Text>
+                <Text style={styles.inputIcon}></Text>
                 <TextInput
                   style={styles.input}
                   placeholder="juan@gmail.com"
@@ -167,7 +160,7 @@ export default function LoginScreen() {
                   errors.password ? styles.inputError : null,
                 ]}
               >
-                <Text style={styles.inputIcon}>🔒</Text>
+                <Text style={styles.inputIcon}></Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your password"
