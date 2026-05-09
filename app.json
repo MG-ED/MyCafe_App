@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/MyCafe_Logo.png",
     "scheme": "mycafe",
-
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },

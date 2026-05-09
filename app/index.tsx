@@ -1,7 +1,8 @@
-import { Redirect } from 'expo-router';
+import SplashScreen from "@/components/SplashScreen";
+import { useRouter } from "expo-router";
 
-// This is the entry point of your app.
-// It redirects to the welcome screen inside (auth) folder.
 export default function Index() {
-  return <Redirect href="/(auth)/welcome" />;
+  const router = useRouter();
+
+  return <SplashScreen onFinish={() => router.replace("/(auth)/welcome")} />;
 }
