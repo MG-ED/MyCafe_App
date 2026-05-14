@@ -1,17 +1,3 @@
-/**
- * SkeletonLoaders.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Collection of animated skeleton placeholders for:
- *   - ProductCard  → menu/product listing
- *   - OrderRow     → order history / queue
- *   - DashboardCard→ KPI / stat tiles
- *   - ProfileCard  → user profile header
- *
- * Usage:
- *   import { ProductCardSkeleton, OrderRowSkeleton, DashboardSkeleton } from './SkeletonLoaders';
- *   {isLoading ? <ProductCardSkeleton count={4} /> : <ProductList ... />}
- */
-
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Animated, Dimensions, ViewStyle } from 'react-native';
 
@@ -19,9 +5,9 @@ const { width } = Dimensions.get('window');
 
 // ─── Brand palette ─────────────────────────────────────────────────────────
 const C = {
-  base:     '#EDE0D0',  // light cream
-  shine:    '#FAF3E0',  // lighter cream highlight
-  bg:       '#FAF3E0',  // card background
+  base:     '#EDE0D0',  
+  shine:    '#FAF3E0',  
+  bg:       '#FAF3E0',  
   espresso: '#2C1A0E',
 };
 

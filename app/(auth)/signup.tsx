@@ -1,4 +1,28 @@
+// ─── app/(auth)/signup.tsx ────────────────────────────────────────────────────
+// SECURITY HARDENED:
+//  ✅ Strong password requirements (8+ chars, upper, lower, digit, special char)
+//  ✅ Real-time password strength meter with visual indicator
+//  ✅ Full input sanitization (XSS, HTML tags, SQL injection patterns)
+//  ✅ Name validation (letters only, no scripts)
+//  ✅ Cafe name validation
+//  ✅ Strict email validation + disposable domain blocking
+//  ✅ Rate limiting on signup (5 attempts → 15-min lockout)
+//  ✅ Data sanitized before writing to Firestore
+//  ✅ Hard character limits on all inputs
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { auth, db } from "@/constants/firebase";
+import {
+  LIMITS,
+  PasswordStrength,
+  checkPasswordStrength,
+  sanitizeText,
+  validateCafeName,
+  validateEmail,
+  validateFullName,
+  validatePassword,
+} from "@/constants/security";
+import { useRateLimiter } from "@/hooks/useRateLimiter";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
@@ -20,29 +44,20 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  Path,
-  RadialGradient,
-  Stop,
-} from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
 
-// ── Brand palette ──────────────────────────────────────────────────────────
 const C = {
-  espresso: "#2C1A0E",
+  espresso:     "#2C1A0E",
   espressoDark: "#1A0F08",
-  espressoMid: "#3D2314",
-  caramel: "#C8793A",
-  cream: "#FAF3E0",
-  latte: "#D4A96A",
-  steamDark: "rgba(255,255,255,0.08)",
-  surface: "rgba(255,255,255,0.06)",
-  border: "rgba(200,121,58,0.25)",
+  caramel:      "#C8793A",
+  cream:        "#FAF3E0",
+  latte:        "#D4A96A",
+  danger:       "#E74C3C",
 };
+
+// ── Background ────────────────────────────────────────────────────────────────
 
 function SignupBackground() {
   return (
@@ -54,248 +69,228 @@ function SignupBackground() {
         end={{ x: 0.4, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View style={signupBgStyles.rayLeft} />
-      <View style={signupBgStyles.rayRight} />
       <Svg width={width} height={height} style={StyleSheet.absoluteFillObject}>
         <Defs>
-          <RadialGradient id="sg1" cx="15%" cy="25%" r="38%">
-            <Stop offset="0" stopColor="#C8793A" stopOpacity="0.16" />
-            <Stop offset="1" stopColor="#2C1A0E" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="sg2" cx="85%" cy="70%" r="38%">
-            <Stop offset="0" stopColor="#D4A96A" stopOpacity="0.13" />
+          <RadialGradient id="sg1" cx="50%" cy="60%" r="55%">
+            <Stop offset="0" stopColor="#C8793A" stopOpacity="0.22" />
             <Stop offset="1" stopColor="#2C1A0E" stopOpacity="0" />
           </RadialGradient>
         </Defs>
-        <Ellipse
-          cx={width * 0.15}
-          cy={height * 0.25}
-          rx={width * 0.55}
-          ry={height * 0.3}
-          fill="url(#sg1)"
-        />
-        <Ellipse
-          cx={width * 0.85}
-          cy={height * 0.7}
-          rx={width * 0.55}
-          ry={height * 0.3}
-          fill="url(#sg2)"
-        />
-        {/* Concentric arcs — centered */}
-        <Circle
-          cx={width * 0.5}
-          cy={height * 0.5}
-          r={width * 0.9}
-          stroke="rgba(200,121,58,0.07)"
-          strokeWidth="1"
-          fill="none"
-        />
-        <Circle
-          cx={width * 0.5}
-          cy={height * 0.5}
-          r={width * 0.7}
-          stroke="rgba(200,121,58,0.05)"
-          strokeWidth="0.8"
-          fill="none"
-        />
-        {/* Top-right beans */}
-        <Ellipse
-          cx={width * 0.85}
-          cy={height * 0.07}
-          rx="15"
-          ry="9"
-          fill="rgba(200,121,58,0.12)"
-          transform={`rotate(-15, ${width * 0.85}, ${height * 0.07})`}
-        />
-        <Path
-          d={`M${width * 0.85 - 9} ${height * 0.07} Q${width * 0.85} ${height * 0.07 - 4} ${width * 0.85 + 9} ${height * 0.07}`}
-          stroke="rgba(200,121,58,0.22)"
-          strokeWidth="1"
-          fill="none"
-        />
-        <Ellipse
-          cx={width * 0.78}
-          cy={height * 0.04}
-          rx="10"
-          ry="6.5"
-          fill="rgba(200,121,58,0.09)"
-          transform={`rotate(10, ${width * 0.78}, ${height * 0.04})`}
-        />
-        {/* Bottom-left beans */}
-        <Ellipse
-          cx={width * 0.13}
-          cy={height * 0.93}
-          rx="17"
-          ry="10.5"
-          fill="rgba(212,169,106,0.1)"
-          transform={`rotate(20, ${width * 0.13}, ${height * 0.93})`}
-        />
-        <Path
-          d={`M${width * 0.13 - 10} ${height * 0.93} Q${width * 0.13} ${height * 0.93 - 5} ${width * 0.13 + 10} ${height * 0.93}`}
-          stroke="rgba(212,169,106,0.18)"
-          strokeWidth="1"
-          fill="none"
-        />
-        {/* Horizontal divider hint */}
-        <Path
-          d={`M${width * 0.06} ${height * 0.44} L${width * 0.94} ${height * 0.44}`}
-          stroke="rgba(200,121,58,0.09)"
-          strokeWidth="0.8"
-          fill="none"
-        />
+        <Ellipse cx={width * 0.5} cy={height * 0.65} rx={width * 0.85} ry={height * 0.5} fill="url(#sg1)" />
+        <Circle cx={width * 0.5} cy={height * 0.76} r={width * 0.82} stroke="rgba(200,121,58,0.17)" strokeWidth="1.5" fill="none" />
+        <Circle cx={width * 0.5} cy={height * 0.76} r={width * 0.68} stroke="rgba(200,121,58,0.10)" strokeWidth="1" fill="none" />
+        <Circle cx={width * 0.5} cy={height * 0.76} r={width * 0.55} stroke="rgba(200,121,58,0.06)" strokeWidth="0.8" fill="none" />
       </Svg>
-      <LinearGradient
-        colors={["transparent", "rgba(18,8,3,0.5)"]}
-        style={signupBgStyles.bottomVignette}
-      />
-      <LinearGradient
-        colors={["rgba(12,6,2,0.5)", "transparent"]}
-        style={signupBgStyles.topVignette}
-      />
+      <LinearGradient colors={["transparent",       "rgba(18,8,3,0.45)"]}  style={bgS.bottom} />
+      <LinearGradient colors={["rgba(12,6,2,0.4)", "transparent"]}          style={bgS.top} />
     </View>
   );
 }
 
-const signupBgStyles = StyleSheet.create({
-  rayLeft: {
-    position: "absolute",
-    width: width * 1.5,
-    height: width * 1.5,
-    borderRadius: width * 0.75,
-    backgroundColor: "rgba(200,121,58,0.045)",
-    top: -width * 0.4,
-    left: -width * 0.65,
-  },
-  rayRight: {
-    position: "absolute",
-    width: width * 1.4,
-    height: width * 1.4,
-    borderRadius: width * 0.7,
-    backgroundColor: "rgba(212,169,106,0.04)",
-    bottom: -width * 0.5,
-    right: -width * 0.55,
-  },
-  bottomVignette: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.3,
-  },
-  topVignette: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.2,
-  },
+const bgS = StyleSheet.create({
+  bottom: { position: "absolute", bottom: 0, left: 0, right: 0, height: height * 0.3 },
+  top:    { position: "absolute", top: 0,    left: 0, right: 0, height: height * 0.2 },
 });
 
+// ── Password Strength Meter ───────────────────────────────────────────────────
+
+function PasswordStrengthMeter({ strength }: { strength: PasswordStrength | null }) {
+  if (!strength) return null;
+
+  const bars = [0, 1, 2, 3, 4];
+
+  return (
+    <View style={meterS.wrapper}>
+      {/* Bar segments */}
+      <View style={meterS.barsRow}>
+        {bars.map((i) => (
+          <View
+            key={i}
+            style={[
+              meterS.bar,
+              {
+                backgroundColor:
+                  i < strength.score
+                    ? strength.color
+                    : "rgba(255,255,255,0.1)",
+              },
+            ]}
+          />
+        ))}
+        <Text style={[meterS.label, { color: strength.color }]}>
+          {strength.label}
+        </Text>
+      </View>
+
+      {/* Requirements list */}
+      {strength.errors.length > 0 && (
+        <View style={meterS.reqWrap}>
+          {strength.errors.map((err, i) => (
+            <Text key={i} style={meterS.req}>• {err}</Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const meterS = StyleSheet.create({
+  wrapper: { gap: 6 },
+  barsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  bar: {
+    flex: 1, height: 4, borderRadius: 2,
+  },
+  label: { fontSize: 11, fontWeight: "700", marginLeft: 4, minWidth: 72 },
+  reqWrap: { gap: 2 },
+  req: { fontSize: 11, color: "rgba(212,169,106,0.65)" },
+});
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+type FormKey = "fullName" | "gmail" | "cafeName" | "password";
+
 export default function SignupScreen() {
-  const router = useRouter();
-  const [form, setForm] = useState({
+  const router  = useRouter();
+  const rl      = useRateLimiter();
+
+  const [form, setForm] = useState<Record<FormKey, string>>({
     fullName: "",
-    gmail: "",
+    gmail:    "",
     cafeName: "",
     password: "",
   });
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Partial<typeof form>>({});
+  const [showPass,    setShowPass]    = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [errors,      setErrors]      = useState<Partial<Record<FormKey, string>>>({});
+  const [focused,     setFocused]     = useState<string | null>(null);
+  const [pwStrength,  setPwStrength]  = useState<PasswordStrength | null>(null);
 
-  const updateForm = (key: keyof typeof form, value: string) => {
+  const updateForm = (key: FormKey, raw: string) => {
+    // Hard character limits
+    const maxLen: Record<FormKey, number> = {
+      fullName: LIMITS.fullName.max,
+      gmail:    LIMITS.email.max,
+      cafeName: LIMITS.cafeName.max,
+      password: LIMITS.password.max,
+    };
+    const value = raw.slice(0, maxLen[key]);
+
     setForm((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: "" }));
+
+    if (key === "password" && value) {
+      setPwStrength(checkPasswordStrength(value));
+    } else if (key === "password") {
+      setPwStrength(null);
+    }
   };
 
   const validate = (): boolean => {
-    const e: Partial<typeof form> = {};
-    if (!form.fullName.trim()) e.fullName = "Full name is required";
-    if (!form.gmail.trim()) e.gmail = "Gmail is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.gmail))
-      e.gmail = "Enter a valid email";
-    if (!form.cafeName.trim()) e.cafeName = "Cafe name is required";
-    else if (form.cafeName.length < 3) e.cafeName = "At least 3 characters";
-    if (!form.password) e.password = "Password is required";
-    else if (form.password.length < 6) e.password = "At least 6 characters";
+    const e: Partial<Record<FormKey, string>> = {};
+
+    const nameErr     = validateFullName(form.fullName);
+    const emailErr    = validateEmail(form.gmail);
+    const cafeErr     = validateCafeName(form.cafeName);
+    const passwordErr = validatePassword(form.password);
+
+    if (nameErr)     e.fullName = nameErr;
+    if (emailErr)    e.gmail    = emailErr;
+    if (cafeErr)     e.cafeName = cafeErr;
+    if (passwordErr) e.password = passwordErr;
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleSignup = async () => {
     if (!validate()) return;
+    if (rl.isLocked) return;
+
+    // Sanitize all text inputs before sending to Firebase/Firestore
+    const cleanEmail    = sanitizeText(form.gmail).toLowerCase();
+    const cleanFullName = sanitizeText(form.fullName);
+    const cleanCafeName = sanitizeText(form.cafeName);
+    // Password: do NOT sanitize — preserve exact characters
+
     setLoading(true);
     try {
       const credential = await createUserWithEmailAndPassword(
         auth,
-        form.gmail.trim().toLowerCase(),
-        form.password,
+        cleanEmail,
+        form.password
       );
       await updateProfile(credential.user, {
-        displayName: form.fullName.trim(),
+        displayName: cleanFullName,
       });
+      // Write sanitized data to Firestore
       await setDoc(doc(db, "users", credential.user.uid), {
-        uid: credential.user.uid,
-        fullName: form.fullName.trim(),
-        email: form.gmail.trim().toLowerCase(),
-        cafeName: form.cafeName.trim(),
+        uid:       credential.user.uid,
+        fullName:  cleanFullName,
+        email:     cleanEmail,
+        cafeName:  cleanCafeName,
         createdAt: serverTimestamp(),
+        // Never store password or any sensitive raw input
       });
+
+      await rl.recordSuccess(cleanEmail);
       router.replace("/(tabs)");
     } catch (error: any) {
+      await rl.recordFailure(cleanEmail);
+
       const msg: Record<string, string> = {
-        "auth/email-already-in-use": "This email is already registered.",
-        "auth/invalid-email": "Please enter a valid email address.",
-        "auth/weak-password": "Password must be at least 6 characters.",
+        "auth/email-already-in-use":   "An account with this email already exists.",
+        "auth/invalid-email":          "Please enter a valid email address.",
+        "auth/weak-password":          "Password does not meet security requirements.",
         "auth/network-request-failed": "Network error. Check your connection.",
+        "auth/operation-not-allowed":  "Account creation is currently disabled.",
       };
       Alert.alert(
         "Sign Up Failed",
-        msg[error.code] ?? error.message ?? "Something went wrong.",
+        msg[error.code] ?? "Something went wrong. Please try again."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const isValid = Object.values(form).every((v) => v.trim().length > 0);
+  const allFilled = Object.values(form).every((v) => v.trim().length > 0);
+  const isFormDisabled = loading || rl.isLocked;
 
   const fields: {
-    key: keyof typeof form;
-    label: string;
-    placeholder: string;
-    icon: string;
+    key:           FormKey;
+    label:         string;
+    placeholder:   string;
     keyboardType?: any;
-    secure?: boolean;
-    autoCapitalize?: any;
+    secure?:       boolean;
+    autoCapitalize?:any;
+    autoComplete?: any;
+    textContentType?:any;
   }[] = [
     {
-      key: "fullName",
-      label: "Full Name",
+      key: "fullName", label: "FULL NAME",
       placeholder: "Juan dela Cruz",
-      icon: "✏️",
       autoCapitalize: "words",
+      autoComplete: "name",
+      textContentType: "name",
     },
     {
-      key: "gmail",
-      label: "Gmail",
+      key: "gmail", label: "GMAIL",
       placeholder: "juan@gmail.com",
-      icon: "📧",
       keyboardType: "email-address",
+      autoComplete: "email",
+      textContentType: "emailAddress",
     },
     {
-      key: "cafeName",
-      label: "Cafe Name",
-      placeholder: "Juan's Cafe",
-      icon: "🏪",
-      autoCapitalize: "words",
+      key: "cafeName", label: "CAFE NAME",
+      placeholder: "JUAN CAFE",
+      autoCapitalize: "characters",
     },
     {
-      key: "password",
-      label: "Password",
-      placeholder: "••••••••",
-      icon: "🔒",
+      key: "password", label: "PASSWORD",
+      placeholder: "• • • • • •",
       secure: true,
+      autoComplete: "new-password",
+      textContentType: "newPassword",
     },
   ];
 
@@ -314,21 +309,15 @@ export default function SignupScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.backIcon}>←</Text>
-            </TouchableOpacity>
             <View style={styles.logoRing}>
               <Image
                 source={require("../../assets/MyCafe_Logo.png")}
-                style={styles.logoEmoji}
+                style={styles.logoImage}
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join MyCafe and start tracking</Text>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Log in to your MyCafe account</Text>
           </View>
 
           {/* Form */}
@@ -336,68 +325,90 @@ export default function SignupScreen() {
             {fields.map((field) => (
               <View key={field.key} style={styles.inputGroup}>
                 <Text style={styles.label}>{field.label}</Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    errors[field.key] ? styles.inputError : null,
-                  ]}
-                >
-                  <Text style={styles.inputIcon}>{field.icon}</Text>
+                <View style={[
+                  styles.inputWrapper,
+                  focused === field.key && styles.inputFocused,
+                  errors[field.key]    && styles.inputError,
+                  isFormDisabled       && styles.inputDisabled,
+                ]}>
                   <TextInput
                     style={styles.input}
                     placeholder={field.placeholder}
-                    placeholderTextColor="rgba(212,169,106,0.45)"
+                    placeholderTextColor="rgba(212,169,106,0.4)"
                     value={form[field.key]}
                     onChangeText={(v) => updateForm(field.key, v)}
+                    onFocus={() => setFocused(field.key)}
+                    onBlur={() => setFocused(null)}
                     autoCapitalize={field.autoCapitalize ?? "none"}
                     autoCorrect={false}
+                    autoComplete={field.autoComplete}
+                    textContentType={field.textContentType}
                     keyboardType={field.keyboardType ?? "default"}
                     secureTextEntry={field.secure && !showPass}
-                    editable={!loading}
+                    editable={!isFormDisabled}
+                    spellCheck={false}
                   />
                   {field.secure && (
-                    <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                    <TouchableOpacity
+                      onPress={() => setShowPass(!showPass)}
+                      disabled={isFormDisabled}
+                    >
                       <Text style={styles.showHide}>
                         {showPass ? "Hide" : "Show"}
                       </Text>
                     </TouchableOpacity>
                   )}
                 </View>
+
+                {/* Password strength meter (only for password field) */}
+                {field.key === "password" && pwStrength && form.password.length > 0 && (
+                  <PasswordStrengthMeter strength={pwStrength} />
+                )}
+
                 {errors[field.key] ? (
-                  <Text style={styles.errorText}>⚠️ {errors[field.key]}</Text>
+                  <Text style={styles.errorText}>⚠ {errors[field.key]}</Text>
                 ) : null}
               </View>
             ))}
           </View>
 
+          {/* Terms */}
           <Text style={styles.terms}>
             By signing up you agree to our{" "}
             <Text style={styles.termsBold}>Terms & Privacy Policy</Text>
           </Text>
 
+          {/* CTA */}
           <View style={styles.cta}>
             <TouchableOpacity
               style={[
                 styles.signupBtn,
-                (!isValid || loading) && styles.btnDisabled,
+                (!allFilled || isFormDisabled) && styles.btnDisabled,
               ]}
               onPress={handleSignup}
               activeOpacity={0.85}
-              disabled={loading}
+              disabled={!allFilled || isFormDisabled}
             >
               {loading ? (
                 <ActivityIndicator color={C.cream} />
               ) : (
-                <Text style={styles.signupBtnText}>Create Account →</Text>
+                <Text style={styles.signupBtnText}>Log in</Text>
               )}
             </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
             <TouchableOpacity
               onPress={() => router.replace("/(auth)/login")}
-              disabled={loading}
+              disabled={isFormDisabled}
             >
               <Text style={styles.loginLink}>
                 Already have an account?{" "}
-                <Text style={styles.loginLinkBold}>Log In</Text>
+                <Text style={styles.loginLinkBold}>Login</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -411,106 +422,55 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 40,
-    gap: 24,
+    gap: 22,
   },
-
-  // Header
-  header: { alignItems: "center" },
-  backBtn: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backIcon: { fontSize: 20, color: C.cream, fontWeight: "600" },
+  header: { alignItems: "center", gap: 5 },
   logoRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: "rgba(200,121,58,0.12)",
-    borderWidth: 1.5,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+    width: 80, height: 80, borderRadius: 22,
+    backgroundColor: "rgba(58,30,12,0.85)",
+    borderWidth: 1.5, borderColor: "rgba(200,121,58,0.35)",
+    alignItems: "center", justifyContent: "center", marginBottom: 14,
   },
-  logoEmoji: { width: 64, height: 64 },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: C.cream,
-    letterSpacing: -0.5,
-  },
-  subtitle: { fontSize: 14, color: C.latte, marginTop: 6, opacity: 0.8 },
+  logoImage: { width: 62, height: 62 },
+  title:    { fontSize: 28, fontWeight: "800", color: C.cream, letterSpacing: -0.3 },
+  subtitle: { fontSize: 13, color: C.latte, opacity: 0.75, marginTop: 2 },
 
-  // Form
   form: { gap: 14 },
-  inputGroup: { gap: 8 },
+  inputGroup: { gap: 7 },
   label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: C.latte,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
+    fontSize: 11, fontWeight: "700", color: C.latte,
+    letterSpacing: 1.0, textTransform: "uppercase",
   },
   inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderWidth: 1.5,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15,
+    borderWidth: 1.5, borderColor: "rgba(200,121,58,0.25)",
   },
-  inputError: {
-    borderColor: "#E74C3C",
-    backgroundColor: "rgba(231,76,60,0.08)",
-  },
-  inputIcon: { fontSize: 16, marginRight: 10 },
-  input: { flex: 1, fontSize: 15, color: C.cream, fontWeight: "500" },
-  showHide: { fontSize: 13, color: C.caramel, fontWeight: "600" },
-  errorText: {
-    fontSize: 12,
-    color: "#E74C3C",
-    fontWeight: "500",
-    marginLeft: 4,
-  },
+  inputFocused:  { borderColor: "rgba(200,121,58,0.65)", backgroundColor: "rgba(255,255,255,0.09)" },
+  inputError:    { borderColor: C.danger, backgroundColor: "rgba(231,76,60,0.08)" },
+  inputDisabled: { opacity: 0.5 },
+  input:         { flex: 1, fontSize: 14, color: C.cream, fontWeight: "500" },
+  showHide:      { fontSize: 13, color: C.caramel, fontWeight: "600" },
+  errorText:     { fontSize: 12, color: C.danger, fontWeight: "500", marginLeft: 4 },
 
-  // Terms
-  terms: { fontSize: 12, color: "rgba(212,169,106,0.5)", textAlign: "center" },
+  terms:     { fontSize: 12, color: "rgba(212,169,106,0.55)", textAlign: "center", lineHeight: 18 },
   termsBold: { fontWeight: "700", color: C.latte },
 
-  // CTA
-  cta: { gap: 16, alignItems: "center" },
+  cta:          { gap: 14, alignItems: "center" },
   signupBtn: {
-    width: "100%",
-    backgroundColor: C.caramel,
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: "center",
-    shadowColor: C.caramel,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 8,
+    width: "100%", backgroundColor: C.caramel, borderRadius: 16,
+    paddingVertical: 18, alignItems: "center",
+    shadowColor: C.caramel, shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 7,
   },
-  btnDisabled: { opacity: 0.45 },
-  signupBtnText: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: C.cream,
-    letterSpacing: 0.5,
-  },
-  loginLink: { fontSize: 14, color: C.latte },
-  loginLinkBold: { fontWeight: "800", color: C.caramel },
+  btnDisabled:   { opacity: 0.5 },
+  signupBtnText: { fontSize: 16, fontWeight: "700", color: C.cream, letterSpacing: 0.3 },
+  divider:       { flexDirection: "row", alignItems: "center", width: "100%", gap: 12 },
+  dividerLine:   { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" },
+  dividerText:   { fontSize: 13, color: "rgba(212,169,106,0.5)", fontWeight: "500" },
+  loginLink:     { fontSize: 14, color: C.latte },
+  loginLinkBold: { fontWeight: "700", color: C.caramel },
 });

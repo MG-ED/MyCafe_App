@@ -1,20 +1,3 @@
-/**
- * LoadingButton.tsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Drop-in replacement for TouchableOpacity that:
- *   • Automatically disables itself when `loading` is true
- *   • Shows an inline spinner so users know the tap registered
- *   • Prevents accidental double-taps
- *   • Matches the MyCafe brand palette
- *
- * Usage:
- *   <LoadingButton
- *     loading={isLoading}
- *     onPress={handleLogin}
- *     label="Sign In"
- *   />
- */
-
 import React, { useEffect, useRef } from 'react';
 import {
   TouchableOpacity,

@@ -1,4 +1,17 @@
+// ─── app/(auth)/login.tsx ─────────────────────────────────────────────────────
+// SECURITY HARDENED:
+//  ✅ Brute-force lockout (5 attempts → 15-min lockout, countdown timer)
+//  ✅ Input sanitization (strips XSS, null bytes, HTML tags)
+//  ✅ Strict email validation
+//  ✅ Generic error messages (no account-existence leakage)
+//  ✅ Disables form during lockout
+//  ✅ Lockout state visible in UI with real-time countdown
+//  ✅ Rate limiter clears on successful login
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { auth } from "@/constants/firebase";
+import { sanitizeText, validateEmail } from "@/constants/security";
+import { useRateLimiter } from "@/hooks/useRateLimiter";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -22,30 +35,22 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  Path,
-  RadialGradient,
-  Stop,
-} from "react-native-svg";
+import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
 
-// ── Brand palette ──────────────────────────────────────────────────────────
 const C = {
-  espresso: "#2C1A0E",
+  espresso:     "#2C1A0E",
   espressoDark: "#1A0F08",
-  espressoMid: "#3D2314",
-  caramel: "#C8793A",
-  cream: "#FAF3E0",
-  latte: "#D4A96A",
-  steamDark: "rgba(255,255,255,0.08)",
-  surface: "rgba(255,255,255,0.06)",
-  border: "rgba(200,121,58,0.25)",
-  borderFocus: "rgba(200,121,58,0.7)",
+  caramel:      "#C8793A",
+  cream:        "#FAF3E0",
+  latte:        "#D4A96A",
+  danger:       "#E74C3C",
+  warning:      "#E67E22",
+  locked:       "#922B21",
 };
+
+// ── Background ────────────────────────────────────────────────────────────────
 
 function LoginBackground() {
   return (
@@ -57,220 +62,173 @@ function LoginBackground() {
         end={{ x: 0.7, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View style={loginBgStyles.rayTopRight} />
-      <View style={loginBgStyles.rayBottomLeft} />
       <Svg width={width} height={height} style={StyleSheet.absoluteFillObject}>
         <Defs>
-          <RadialGradient id="lg1" cx="70%" cy="15%" r="40%">
-            <Stop offset="0" stopColor="#C8793A" stopOpacity="0.18" />
-            <Stop offset="1" stopColor="#2C1A0E" stopOpacity="0" />
-          </RadialGradient>
-          <RadialGradient id="lg2" cx="20%" cy="80%" r="35%">
-            <Stop offset="0" stopColor="#D4A96A" stopOpacity="0.12" />
+          <RadialGradient id="lg1" cx="50%" cy="60%" r="55%">
+            <Stop offset="0" stopColor="#C8793A" stopOpacity="0.22" />
             <Stop offset="1" stopColor="#2C1A0E" stopOpacity="0" />
           </RadialGradient>
         </Defs>
-        <Ellipse
-          cx={width * 0.7}
-          cy={height * 0.15}
-          rx={width * 0.6}
-          ry={height * 0.28}
-          fill="url(#lg1)"
-        />
-        <Ellipse
-          cx={width * 0.2}
-          cy={height * 0.8}
-          rx={width * 0.5}
-          ry={height * 0.25}
-          fill="url(#lg2)"
-        />
-        {/* Decorative arcs top-right */}
-        <Circle
-          cx={width * 1.1}
-          cy={-height * 0.05}
-          r={width * 0.65}
-          stroke="rgba(200,121,58,0.1)"
-          strokeWidth="1"
-          fill="none"
-        />
-        <Circle
-          cx={width * 1.1}
-          cy={-height * 0.05}
-          r={width * 0.5}
-          stroke="rgba(200,121,58,0.07)"
-          strokeWidth="0.8"
-          fill="none"
-        />
-        {/* Decorative arcs bottom-left */}
-        <Circle
-          cx={-width * 0.1}
-          cy={height * 1.08}
-          r={width * 0.6}
-          stroke="rgba(212,169,106,0.08)"
-          strokeWidth="1"
-          fill="none"
-        />
-        {/* Coffee beans top-left */}
-        <Ellipse
-          cx={width * 0.12}
-          cy={height * 0.08}
-          rx="16"
-          ry="10"
-          fill="rgba(200,121,58,0.12)"
-          transform={`rotate(25, ${width * 0.12}, ${height * 0.08})`}
-        />
-        <Path
-          d={`M${width * 0.12 - 10} ${height * 0.08} Q${width * 0.12} ${height * 0.08 - 5} ${width * 0.12 + 10} ${height * 0.08}`}
-          stroke="rgba(200,121,58,0.22)"
-          strokeWidth="1"
-          fill="none"
-        />
-        <Ellipse
-          cx={width * 0.19}
-          cy={height * 0.05}
-          rx="11"
-          ry="7"
-          fill="rgba(200,121,58,0.09)"
-          transform={`rotate(-10, ${width * 0.19}, ${height * 0.05})`}
-        />
-        {/* Coffee beans bottom-right */}
-        <Ellipse
-          cx={width * 0.88}
-          cy={height * 0.92}
-          rx="18"
-          ry="11"
-          fill="rgba(212,169,106,0.1)"
-          transform={`rotate(-20, ${width * 0.88}, ${height * 0.92})`}
-        />
-        <Path
-          d={`M${width * 0.88 - 11} ${height * 0.92} Q${width * 0.88} ${height * 0.92 - 5} ${width * 0.88 + 11} ${height * 0.92}`}
-          stroke="rgba(212,169,106,0.18)"
-          strokeWidth="1"
-          fill="none"
-        />
-        {/* Horizontal separator hint */}
-        <Path
-          d={`M${width * 0.08} ${height * 0.52} L${width * 0.92} ${height * 0.52}`}
-          stroke="rgba(200,121,58,0.1)"
-          strokeWidth="0.8"
-          fill="none"
-        />
+        <Ellipse cx={width * 0.5} cy={height * 0.65} rx={width * 0.85} ry={height * 0.5} fill="url(#lg1)" />
+        <Circle cx={width * 0.5} cy={height * 0.75} r={width * 0.82} stroke="rgba(200,121,58,0.18)" strokeWidth="1.5" fill="none" />
+        <Circle cx={width * 0.5} cy={height * 0.75} r={width * 0.67} stroke="rgba(200,121,58,0.10)" strokeWidth="1" fill="none" />
+        <Circle cx={width * 0.5} cy={height * 0.75} r={width * 0.54} stroke="rgba(200,121,58,0.06)" strokeWidth="0.8" fill="none" />
       </Svg>
-      <LinearGradient
-        colors={["transparent", "rgba(20,10,4,0.55)"]}
-        style={loginBgStyles.bottomVignette}
-      />
-      <LinearGradient
-        colors={["rgba(15,8,3,0.45)", "transparent"]}
-        style={loginBgStyles.topVignette}
-      />
+      <LinearGradient colors={["transparent", "rgba(20,10,4,0.45)"]} style={bgS.bottom} />
+      <LinearGradient colors={["rgba(15,8,3,0.35)", "transparent"]} style={bgS.top} />
     </View>
   );
 }
 
-const loginBgStyles = StyleSheet.create({
-  rayTopRight: {
-    position: "absolute",
-    width: width * 1.5,
-    height: width * 1.5,
-    borderRadius: width * 0.75,
-    backgroundColor: "rgba(200,121,58,0.05)",
-    top: -width * 0.65,
-    right: -width * 0.55,
-  },
-  rayBottomLeft: {
-    position: "absolute",
-    width: width * 1.4,
-    height: width * 1.4,
-    borderRadius: width * 0.7,
-    backgroundColor: "rgba(212,169,106,0.04)",
-    bottom: -width * 0.55,
-    left: -width * 0.5,
-  },
-  bottomVignette: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.3,
-  },
-  topVignette: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.22,
-  },
+const bgS = StyleSheet.create({
+  bottom: { position: "absolute", bottom: 0, left: 0, right: 0, height: height * 0.3 },
+  top:    { position: "absolute", top: 0,    left: 0, right: 0, height: height * 0.22 },
 });
+
+// ── Lockout Banner ────────────────────────────────────────────────────────────
+
+function LockoutBanner({ remainingSeconds }: { remainingSeconds: number }) {
+  const mins = Math.floor(remainingSeconds / 60);
+  const secs = remainingSeconds % 60;
+  const timeStr = mins > 0
+    ? `${mins}m ${secs.toString().padStart(2, "0")}s`
+    : `${secs}s`;
+
+  return (
+    <View style={lockS.banner}>
+      <Text style={lockS.icon}>🔒</Text>
+      <View style={lockS.textWrap}>
+        <Text style={lockS.title}>Account Temporarily Locked</Text>
+        <Text style={lockS.sub}>
+          Too many failed attempts. Try again in{" "}
+          <Text style={lockS.timer}>{timeStr}</Text>
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const lockS = StyleSheet.create({
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(146,43,33,0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(231,76,60,0.45)",
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+  },
+  icon:    { fontSize: 24 },
+  textWrap:{ flex: 1 },
+  title:   { fontSize: 13, fontWeight: "700", color: "#F1948A" },
+  sub:     { fontSize: 12, color: "rgba(241,148,138,0.75)", marginTop: 2 },
+  timer:   { fontWeight: "800", color: "#F1948A" },
+});
+
+// ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const rl = useRateLimiter();
+
+  const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState({ email: "", password: "" });
+  const [loading,  setLoading]  = useState(false);
+  const [errors,   setErrors]   = useState({ email: "", password: "" });
+  const [focused,  setFocused]  = useState<string | null>(null);
 
-  const validate = () => {
-    const e = { email: "", password: "" };
-    if (!email.trim()) e.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      e.email = "Enter a valid email";
-    if (!password) e.password = "Password is required";
-    setErrors(e);
-    return !e.email && !e.password;
+  // Check lock state when email field loses focus
+  const handleEmailBlur = async () => {
+    setFocused(null);
+    if (email.trim()) await rl.checkLock(email.trim().toLowerCase());
+  };
+
+  const validate = (): boolean => {
+    const emailErr = validateEmail(email);
+    const passErr  = !password ? "Password is required." : "";
+    setErrors({ email: emailErr ?? "", password: passErr });
+    return !emailErr && !passErr;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
+    if (rl.isLocked) return;
+
+    const cleanEmail = sanitizeText(email).toLowerCase();
+    // We don't sanitize password — preserve special chars the user chose
+
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(
-        auth,
-        email.trim().toLowerCase(),
-        password,
-      );
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
+      await rl.recordSuccess(cleanEmail);
       router.replace("/(tabs)");
     } catch (error: any) {
-      const msg: Record<string, string> = {
-        "auth/user-not-found": "No account found with this email.",
-        "auth/wrong-password": "Incorrect password. Please try again.",
-        "auth/invalid-email": "Please enter a valid email address.",
-        "auth/invalid-credential": "Invalid email or password.",
-        "auth/too-many-requests": "Too many failed attempts. Try again later.",
+      // ── Record the failure for rate limiting ──
+      const nowLocked = await rl.recordFailure(cleanEmail);
+
+      if (nowLocked) {
+        // Banner already shown; no additional alert
+        setPassword("");
+        setLoading(false);
+        return;
+      }
+
+      // ── Generic error messages (don't leak account existence) ──
+      const authErrors: Record<string, string> = {
+        "auth/user-not-found":         "Invalid email or password.",
+        "auth/wrong-password":         "Invalid email or password.",
+        "auth/invalid-credential":     "Invalid email or password.",
+        "auth/invalid-email":          "Please enter a valid email address.",
+        "auth/user-disabled":          "This account has been suspended. Contact support.",
+        "auth/too-many-requests":      "Too many attempts. Please wait before trying again.",
         "auth/network-request-failed": "Network error. Check your connection.",
-        "auth/user-disabled": "This account has been disabled.",
       };
-      Alert.alert(
-        "Login Failed",
-        msg[error.code] ?? error.message ?? "Something went wrong.",
-      );
+
+      const msg = authErrors[error.code]
+        ?? "Login failed. Please check your credentials and try again.";
+
+      const attemptsLeft = rl.attemptsLeft;
+      const warningMsg = attemptsLeft <= 2 && attemptsLeft > 0
+        ? `\n\n⚠️ Warning: ${attemptsLeft} attempt${attemptsLeft === 1 ? "" : "s"} remaining before your account is temporarily locked.`
+        : "";
+
+      Alert.alert("Login Failed", msg + warningMsg);
+      setPassword(""); // Always clear password on failure
     } finally {
       setLoading(false);
     }
   };
 
   const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      Alert.alert(
-        "Enter Email",
-        "Please type your email address first, then tap Forgot Password.",
-      );
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      Alert.alert("Enter Email", "Type your email address first, then tap Forgot Password.");
+      return;
+    }
+    const emailErr = validateEmail(cleanEmail);
+    if (emailErr) {
+      Alert.alert("Invalid Email", emailErr);
       return;
     }
     try {
-      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      await sendPasswordResetEmail(auth, cleanEmail);
+      // Generic success message — don't confirm account existence
       Alert.alert(
-        "Email Sent ✉️",
-        `Password reset link sent to ${email.trim()}. Check your inbox.`,
+        "Reset Email Sent",
+        "If an account exists for that email, a password reset link has been sent. Check your inbox and spam folder."
       );
     } catch {
+      // Always show the same message to prevent account enumeration
       Alert.alert(
-        "Error",
-        "Could not send reset email. Make sure the email is correct.",
+        "Reset Email Sent",
+        "If an account exists for that email, a password reset link has been sent."
       );
     }
   };
+
+  const isFormDisabled = loading || rl.isLocked;
 
   return (
     <KeyboardAvoidingView
@@ -287,16 +245,10 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.backIcon}>←</Text>
-            </TouchableOpacity>
             <View style={styles.logoRing}>
               <Image
                 source={require("../../assets/MyCafe_Logo.png")}
-                style={styles.logoEmoji}
+                style={styles.logoImage}
                 resizeMode="contain"
               />
             </View>
@@ -304,79 +256,94 @@ export default function LoginScreen() {
             <Text style={styles.subtitle}>Log in to your MyCafe account</Text>
           </View>
 
+          {/* Lockout banner */}
+          {rl.isLocked && <LockoutBanner remainingSeconds={rl.remainingSeconds} />}
+
           {/* Form */}
           <View style={styles.form}>
             {/* Email */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Gmail / Email</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  errors.email ? styles.inputError : null,
-                ]}
-              >
-                <Text style={styles.inputIcon}>✉️</Text>
+              <Text style={styles.label}>Gmail/Email</Text>
+              <View style={[
+                styles.inputWrapper,
+                focused === "email" && styles.inputFocused,
+                errors.email       && styles.inputError,
+                rl.isLocked        && styles.inputDisabled,
+              ]}>
                 <TextInput
-                  style={styles.input}
-                  placeholder="juan@gmail.com"
-                  placeholderTextColor="rgba(212,169,106,0.45)"
+                  style={[styles.input, isFormDisabled && styles.inputTextDisabled]}
+                  placeholder="(juan@gmail.com)"
+                  placeholderTextColor="rgba(212,169,106,0.4)"
                   value={email}
                   onChangeText={(v) => {
-                    setEmail(v);
+                    setEmail(v.slice(0, 254)); // Hard length cap
                     setErrors((p) => ({ ...p, email: "" }));
                   }}
+                  onFocus={() => setFocused("email")}
+                  onBlur={handleEmailBlur}
                   autoCapitalize="none"
                   keyboardType="email-address"
                   autoCorrect={false}
-                  editable={!loading}
+                  autoComplete="email"
+                  textContentType="emailAddress"
+                  editable={!isFormDisabled}
                 />
               </View>
-              {errors.email ? (
-                <Text style={styles.errorText}>⚠️ {errors.email}</Text>
-              ) : null}
+              {errors.email ? <Text style={styles.errorText}>⚠ {errors.email}</Text> : null}
             </View>
 
             {/* Password */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  errors.password ? styles.inputError : null,
-                ]}
-              >
-                <Text style={styles.inputIcon}>🔒</Text>
+              <View style={[
+                styles.inputWrapper,
+                focused === "password" && styles.inputFocused,
+                errors.password        && styles.inputError,
+                rl.isLocked            && styles.inputDisabled,
+              ]}>
                 <TextInput
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  placeholderTextColor="rgba(212,169,106,0.45)"
+                  style={[styles.input, isFormDisabled && styles.inputTextDisabled]}
+                  placeholder="(Enter your password)"
+                  placeholderTextColor="rgba(212,169,106,0.4)"
                   value={password}
                   onChangeText={(v) => {
-                    setPassword(v);
+                    setPassword(v.slice(0, 128)); // Hard length cap
                     setErrors((p) => ({ ...p, password: "" }));
                   }}
+                  onFocus={() => setFocused("password")}
+                  onBlur={() => setFocused(null)}
                   secureTextEntry={!showPass}
                   autoCapitalize="none"
-                  editable={!loading}
+                  autoCorrect={false}
+                  autoComplete="password"
+                  textContentType="password"
+                  editable={!isFormDisabled}
                 />
-                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                  <Text style={styles.showHide}>
-                    {showPass ? "Hide" : "Show"}
-                  </Text>
-                </TouchableOpacity>
+                {!rl.isLocked && (
+                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                    <Text style={styles.showHide}>{showPass ? "Hide" : "Show"}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              {errors.password ? (
-                <Text style={styles.errorText}>⚠️ {errors.password}</Text>
-              ) : null}
+              {errors.password ? <Text style={styles.errorText}>⚠ {errors.password}</Text> : null}
             </View>
 
-            <TouchableOpacity
-              style={styles.forgotBtn}
-              onPress={handleForgotPassword}
-              disabled={loading}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </TouchableOpacity>
+            {/* Attempts warning */}
+            {!rl.isLocked && rl.attemptsLeft < 5 && rl.attemptsLeft > 0 && (
+              <Text style={styles.warningText}>
+                ⚠ {rl.attemptsLeft} attempt{rl.attemptsLeft === 1 ? "" : "s"} left before temporary lockout
+              </Text>
+            )}
+
+            {!rl.isLocked && (
+              <TouchableOpacity
+                style={styles.forgotBtn}
+                onPress={handleForgotPassword}
+                disabled={isFormDisabled}
+              >
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* CTA */}
@@ -384,16 +351,19 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={[
                 styles.loginBtn,
-                (!email || !password || loading) && styles.loginBtnDisabled,
+                (isFormDisabled || !email || !password) && styles.loginBtnDisabled,
+                rl.isLocked && styles.loginBtnLocked,
               ]}
               onPress={handleLogin}
               activeOpacity={0.85}
-              disabled={loading}
+              disabled={isFormDisabled}
             >
               {loading ? (
                 <ActivityIndicator color={C.cream} />
+              ) : rl.isLocked ? (
+                <Text style={styles.loginBtnText}>🔒 Account Locked</Text>
               ) : (
-                <Text style={styles.loginBtnText}>Log In →</Text>
+                <Text style={styles.loginBtnText}>Log in</Text>
               )}
             </TouchableOpacity>
 
@@ -405,7 +375,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               onPress={() => router.replace("/(auth)/signup")}
-              disabled={loading}
+              disabled={isFormDisabled}
             >
               <Text style={styles.signupLink}>
                 Don't have an account?{" "}
@@ -423,117 +393,55 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 60,
+    paddingTop: 64,
     paddingBottom: 40,
     justifyContent: "space-between",
     gap: 28,
   },
-
-  // Header
-  header: { alignItems: "center" },
-  backBtn: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backIcon: { fontSize: 20, color: C.cream, fontWeight: "600" },
+  header: { alignItems: "center", gap: 6 },
   logoRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: "rgba(200,121,58,0.12)",
-    borderWidth: 1.5,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+    width: 80, height: 80, borderRadius: 22,
+    backgroundColor: "rgba(58,30,12,0.85)",
+    borderWidth: 1.5, borderColor: "rgba(200,121,58,0.35)",
+    alignItems: "center", justifyContent: "center", marginBottom: 14,
   },
-  logoEmoji: { width: 64, height: 64 },
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: C.cream,
-    letterSpacing: -0.5,
-  },
-  subtitle: { fontSize: 14, color: C.latte, marginTop: 6, opacity: 0.8 },
+  logoImage: { width: 62, height: 62 },
+  title:    { fontSize: 28, fontWeight: "800", color: C.cream, letterSpacing: -0.3 },
+  subtitle: { fontSize: 13, color: C.latte, opacity: 0.75, marginTop: 2 },
 
-  // Form
-  form: { gap: 16 },
+  form: { gap: 18 },
   inputGroup: { gap: 8 },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: C.latte,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
+  label: { fontSize: 12, fontWeight: "700", color: C.latte, letterSpacing: 0.5 },
   inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderWidth: 1.5,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 14, paddingHorizontal: 18, paddingVertical: 16,
+    borderWidth: 1.5, borderColor: "rgba(200,121,58,0.25)",
   },
-  inputError: {
-    borderColor: "#E74C3C",
-    backgroundColor: "rgba(231,76,60,0.08)",
-  },
-  inputIcon: { fontSize: 18, marginRight: 10 },
-  input: { flex: 1, fontSize: 15, color: C.cream, fontWeight: "500" },
-  showHide: { fontSize: 13, color: C.caramel, fontWeight: "600" },
-  errorText: {
-    fontSize: 12,
-    color: "#E74C3C",
-    fontWeight: "500",
-    marginLeft: 4,
-  },
-  forgotBtn: { alignSelf: "flex-end" },
-  forgotText: { fontSize: 13, color: C.caramel, fontWeight: "600" },
+  inputFocused:      { borderColor: "rgba(200,121,58,0.65)", backgroundColor: "rgba(255,255,255,0.09)" },
+  inputError:        { borderColor: C.danger, backgroundColor: "rgba(231,76,60,0.08)" },
+  inputDisabled:     { borderColor: "rgba(146,43,33,0.4)", backgroundColor: "rgba(146,43,33,0.08)", opacity: 0.6 },
+  input:             { flex: 1, fontSize: 14, color: C.cream, fontWeight: "500" },
+  inputTextDisabled: { color: "rgba(250,243,224,0.4)" },
+  showHide:          { fontSize: 13, color: C.caramel, fontWeight: "600" },
+  errorText:         { fontSize: 12, color: C.danger, fontWeight: "500", marginLeft: 4 },
+  warningText:       { fontSize: 12, color: C.warning, fontWeight: "600", textAlign: "right" },
+  forgotBtn:         { alignSelf: "flex-end" },
+  forgotText:        { fontSize: 13, color: C.caramel, fontWeight: "600" },
 
-  // CTA
   cta: { gap: 16, alignItems: "center" },
   loginBtn: {
-    width: "100%",
-    backgroundColor: C.caramel,
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: "center",
-    shadowColor: C.caramel,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 8,
+    width: "100%", backgroundColor: C.caramel, borderRadius: 16,
+    paddingVertical: 18, alignItems: "center",
+    shadowColor: C.caramel, shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 7,
   },
-  loginBtnDisabled: { opacity: 0.45 },
-  loginBtnText: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: C.cream,
-    letterSpacing: 0.5,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    gap: 12,
-  },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" },
-  dividerText: {
-    fontSize: 13,
-    color: "rgba(212,169,106,0.5)",
-    fontWeight: "500",
-  },
-  signupLink: { fontSize: 14, color: C.latte },
-  signupLinkBold: { fontWeight: "800", color: C.caramel },
+  loginBtnDisabled: { opacity: 0.5 },
+  loginBtnLocked:   { backgroundColor: C.locked, shadowColor: C.locked },
+  loginBtnText:     { fontSize: 16, fontWeight: "700", color: C.cream, letterSpacing: 0.3 },
+  divider:          { flexDirection: "row", alignItems: "center", width: "100%", gap: 12 },
+  dividerLine:      { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" },
+  dividerText:      { fontSize: 13, color: "rgba(212,169,106,0.5)", fontWeight: "500" },
+  signupLink:       { fontSize: 14, color: C.latte },
+  signupLinkBold:   { fontWeight: "700", color: C.caramel },
 });
