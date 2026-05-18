@@ -1,6 +1,7 @@
 import { auth, db } from "@/constants/firebase";
-import Constants from "expo-constants";
+import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
+import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import {
   deleteUser,
@@ -40,18 +41,27 @@ export function useGoogleSignIn({
   const handledTokenRef = useRef<string | null>(null);
   const extra = (Constants.expoConfig?.extra ?? {}) as GoogleExtra;
 
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: "mycafe",
+  });
+
   const clientIds = useMemo(
     () => ({
       webClientId: extra.googleWebClientId || undefined,
       iosClientId: extra.googleIosClientId || undefined,
       androidClientId: extra.googleAndroidClientId || undefined,
     }),
-    [extra.googleAndroidClientId, extra.googleIosClientId, extra.googleWebClientId],
+    [
+      extra.googleAndroidClientId,
+      extra.googleIosClientId,
+      extra.googleWebClientId,
+    ],
   );
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     ...clientIds,
     scopes: ["openid", "profile", "email"],
+    redirectUri,
   });
 
   const isConfigured = Boolean(
