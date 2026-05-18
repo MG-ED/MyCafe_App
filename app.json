@@ -17,7 +17,8 @@
         "monochromeImage": "./assets/MyCafe_Logo.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.edmgph.MyCAFE"
     },
     "web": {
       "output": "static",
@@ -33,13 +34,18 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-font",
-      "expo-web-browser"
+      "expo-font"
     ],
     "extra": {
-      "googleWebClientId": "",
+      "googleWebClientId": "465844142916-20d1vkepbovt7p8nrra0v127vq106052.apps.googleusercontent.com",
       "googleIosClientId": "",
-      "googleAndroidClientId": "465844142916-20d1vkepbovt7p8nrra0v127vq106052.apps.googleusercontent.com"
+      "googleAndroidClientId": "465844142916-20d1vkepbovt7p8nrra0v127vq106052.apps.googleusercontent.com",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "09dae096-878d-4ebb-bb32-0b4940942dc1"
+      }
     },
     "experiments": {
       "typedRoutes": true
