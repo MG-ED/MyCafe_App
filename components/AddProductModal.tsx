@@ -61,15 +61,20 @@ export default function AddProductModal({
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState<ProductCategory>(defaultCategory);
   const [selectedColor, setSelectedColor] = useState(DRINK_COLORS[0]);
-  // CHANGED: imageUri replaces the old emoji state
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  // Sub-tag: lets the filter chips in Snacks/Drinks actually work
+  const [subTag, setSubTag] = useState<string>("Hot");
+
+  const DRINK_TAGS = ["Hot", "Iced", "Classic"];
+  const SNACK_TAGS = ["Cake", "Sandwich", "Cookies"];
 
   const colors = category === "drinks" ? DRINK_COLORS : SNACK_COLORS;
 
   const handleCategorySwitch = (cat: ProductCategory) => {
     setCategory(cat);
     setSelectedColor(cat === "drinks" ? DRINK_COLORS[0] : SNACK_COLORS[0]);
+    setSubTag(cat === "drinks" ? "Hot" : "Cake");
   };
 
   // ── Image picker ──────────────────────────────────────────────────────────
@@ -163,14 +168,14 @@ export default function AddProductModal({
       emoji: category === "drinks" ? "☕" : "🍪", // fallback if no image
       imageUri: imageUri ?? undefined,
       bg: selectedColor,
-      // FIXED: tag was "🆕 New" for both branches — now clearly labelled
-      tag: "🆕 New",
+      tag: subTag,
     });
 
     // Reset all fields
     setName("");
     setPrice("");
     setImageUri(null);
+    setSubTag(category === "drinks" ? "Hot" : "Cake");
     onClose();
   };
 
@@ -179,6 +184,7 @@ export default function AddProductModal({
     setName("");
     setPrice("");
     setImageUri(null);
+    setSubTag(category === "drinks" ? "Hot" : "Cake");
     onClose();
   };
 
@@ -250,6 +256,29 @@ export default function AddProductModal({
                   Snack
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            {/* ── Sub-tag selector (fixes filter chips in Snacks/Drinks screens) ── */}
+            <Text style={styles.label}>
+              {category === "drinks" ? "Drink Type" : "Snack Type"}
+            </Text>
+            <View style={styles.tagRow}>
+              {(category === "drinks" ? DRINK_TAGS : SNACK_TAGS).map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.tagChip, subTag === t && styles.tagChipActive]}
+                  onPress={() => setSubTag(t)}
+                >
+                  <Text
+                    style={[
+                      styles.tagChipText,
+                      subTag === t && styles.tagChipTextActive,
+                    ]}
+                  >
+                    {t}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {/* ── Image Upload (replaces emoji picker) ── */}
@@ -490,6 +519,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
+  },
+
+  // Sub-tag selector
+  tagRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 20,
+    flexWrap: "wrap",
+  },
+  tagChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 100,
+    backgroundColor: "#F5E6D3",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  tagChipActive: {
+    backgroundColor: "#3E1F0D",
+    borderColor: "#3E1F0D",
+  },
+  tagChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#8B6355",
+  },
+  tagChipTextActive: {
+    color: "#FFF5E4",
   },
 
   // Preview card

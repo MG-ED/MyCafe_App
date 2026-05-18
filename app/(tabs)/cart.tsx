@@ -1,11 +1,3 @@
-// ─── app/(tabs)/cart.tsx ──────────────────────────────────────────────────────
-// FIXED:
-//  • item.product.bg crash — CartItem now has nested product object
-//  • updateCartQuantity / removeFromCart now called with (id, size, delta)
-//  • placeOrder now called with customerName argument
-//  • Added useSafeAreaInsets for proper bottom inset on Android + iOS
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
@@ -50,19 +42,13 @@ export default function CartScreen() {
       Alert.alert("Name Required", "Please enter the customer's name.");
       return;
     }
-    // FIXED: pass customerName to placeOrder
     placeOrder(customerName.trim());
     setCustomerName("");
     setShowModal(false);
     Alert.alert("✅ Order Placed!", "Order has been sent to kitchen.");
   };
 
-  // FIXED: use insets for safe bottom padding
-  const checkoutBottomPad = insets.bottom + 16;
-
   return (
-    // FIXED: removed SafeAreaView — the tab layout already handles safe area.
-    // Use a plain View with top padding derived from insets instead.
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
@@ -92,83 +78,94 @@ export default function CartScreen() {
           </Text>
         </View>
       ) : (
-        <>
-          <ScrollView
-            contentContainerStyle={[
-              styles.list,
-              // FIXED: bottom padding so checkout panel doesn't cover last item
-              { paddingBottom: 160 + checkoutBottomPad },
-            ]}
-            showsVerticalScrollIndicator={false}
-          >
-            {cart.map((item) => (
-              <View
-                // FIXED: key uses product.id (nested)
-                key={`${item.product.id}-${item.size}`}
-                // FIXED: item.product.bg — no longer crashes
-                style={[styles.cartItem, { backgroundColor: item.product.bg }]}
-              >
-                <Text style={styles.itemEmoji}>{item.product.emoji}</Text>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.product.name}</Text>
-                  <Text style={styles.itemSize}>Size: {item.size}</Text>
-                  <Text style={styles.itemPrice}>
-                    ₱{(item.product.price * item.quantity).toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity
-                    style={styles.qtyBtn}
-                    // FIXED: (id, size, delta)
-                    onPress={() =>
-                      updateCartQuantity(item.product.id, item.size, -1)
-                    }
-                  >
-                    <Feather name="minus" size={14} color="#FFF5E4" />
-                  </TouchableOpacity>
-                  <Text style={styles.qtyNum}>{item.quantity}</Text>
-                  <TouchableOpacity
-                    style={styles.qtyBtn}
-                    onPress={() =>
-                      updateCartQuantity(item.product.id, item.size, 1)
-                    }
-                  >
-                    <Feather name="plus" size={14} color="#FFF5E4" />
-                  </TouchableOpacity>
-                </View>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Cart Items */}
+          {cart.map((item) => (
+            <View
+              key={`${item.product.id}-${item.size}`}
+              style={[styles.cartItem, { backgroundColor: item.product.bg }]}
+            >
+              <Text style={styles.itemEmoji}>{item.product.emoji}</Text>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemName}>{item.product.name}</Text>
+                <Text style={styles.itemSize}>Size: {item.size}</Text>
+                <Text style={styles.itemPrice}>
+                  ₱{(item.product.price * item.quantity).toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.qtyControls}>
                 <TouchableOpacity
-                  style={styles.removeBtn}
-                  // FIXED: (id, size)
-                  onPress={() => removeFromCart(item.product.id, item.size)}
+                  style={styles.qtyBtn}
+                  onPress={() =>
+                    updateCartQuantity(item.product.id, item.size, -1)
+                  }
                 >
-                  <Feather name="x" size={16} color="#C0392B" />
+                  <Feather name="minus" size={14} color="#FFF5E4" />
+                </TouchableOpacity>
+                <Text style={styles.qtyNum}>{item.quantity}</Text>
+                <TouchableOpacity
+                  style={styles.qtyBtn}
+                  onPress={() =>
+                    updateCartQuantity(item.product.id, item.size, 1)
+                  }
+                >
+                  <Feather name="plus" size={14} color="#FFF5E4" />
                 </TouchableOpacity>
               </View>
-            ))}
-          </ScrollView>
+              <TouchableOpacity
+                style={styles.removeBtn}
+                onPress={() => removeFromCart(item.product.id, item.size)}
+              >
+                <Feather name="x" size={16} color="#C0392B" />
+              </TouchableOpacity>
+            </View>
+          ))}
 
-          {/* Checkout Panel — pinned to bottom with correct inset */}
-          <View style={[styles.checkout, { paddingBottom: checkoutBottomPad }]}>
-            <View style={styles.checkoutRow}>
+          {/* Order Summary Card — inline, no dark overlay */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Order Summary</Text>
+            <View style={styles.summaryDivider} />
+
+            {cart.map((item) => (
+              <View
+                key={`summary-${item.product.id}-${item.size}`}
+                style={styles.summaryRow}
+              >
+                <Text style={styles.summaryItemName} numberOfLines={1}>
+                  {item.product.emoji} {item.product.name}
+                  <Text style={styles.summaryItemQty}> ×{item.quantity}</Text>
+                </Text>
+                <Text style={styles.summaryItemPrice}>
+                  ₱{(item.product.price * item.quantity).toLocaleString()}
+                </Text>
+              </View>
+            ))}
+
+            <View style={styles.summaryTotalRow}>
               <View>
-                <Text style={styles.checkoutLabel}>
+                <Text style={styles.summaryTotalLabel}>
                   {cartCount} item{cartCount !== 1 ? "s" : ""}
                 </Text>
-                <Text style={styles.checkoutTotal}>
+                <Text style={styles.summaryTotal}>
                   ₱{cartTotal.toLocaleString()}
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.orderBtn}
-                onPress={handlePlaceOrder}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.orderBtnText}>Place Order</Text>
-                <Feather name="arrow-right" size={16} color="#FFF5E4" />
-              </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={styles.orderBtn}
+              onPress={handlePlaceOrder}
+              activeOpacity={0.85}
+            >
+              <Feather name="shopping-bag" size={18} color="#FFF5E4" />
+              <Text style={styles.orderBtnText}>Place Order</Text>
+              <Feather name="arrow-right" size={18} color="#FFF5E4" />
+            </TouchableOpacity>
           </View>
-        </>
+        </ScrollView>
       )}
 
       {/* Customer Name Modal */}
@@ -189,7 +186,6 @@ export default function CartScreen() {
               Enter the name for this order
             </Text>
 
-            {/* Order Preview */}
             <View style={styles.orderPreview}>
               {cart.map((item) => (
                 <View
@@ -248,6 +244,7 @@ export default function CartScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#FDF6EC" },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -279,7 +276,13 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: "800", color: "#3E1F0D" },
   emptySubtitle: { fontSize: 14, color: "#8B6355" },
 
-  list: { paddingHorizontal: 20, gap: 12, paddingTop: 4 },
+  list: {
+    paddingHorizontal: 20,
+    gap: 12,
+    paddingTop: 4,
+    paddingBottom: 28,
+  },
+
   cartItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -333,51 +336,92 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  checkout: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#3E1F0D",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 20,
+  // ── Summary Card ────────────────────────────────────────────────────────────
+  summaryCard: {
+    backgroundColor: "#FFF8F0",
+    borderRadius: 24,
+    padding: 20,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#F0DEC8",
+    shadowColor: "#3E1F0D",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
   },
-  checkoutRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  checkoutLabel: { fontSize: 12, color: "#C4A882", fontWeight: "600" },
-  checkoutTotal: {
-    fontSize: 26,
+  summaryTitle: {
+    fontSize: 16,
     fontWeight: "800",
-    color: "#FFF5E4",
-    marginTop: 2,
+    color: "#3E1F0D",
+    marginBottom: 12,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: "#F0DEC8",
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  summaryItemName: {
+    flex: 1,
+    fontSize: 13,
+    color: "#3E1F0D",
+    fontWeight: "600",
+    marginRight: 8,
+  },
+  summaryItemQty: {
+    fontSize: 12,
+    color: "#8B6355",
+    fontWeight: "400",
+  },
+  summaryItemPrice: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#3E1F0D",
+  },
+  summaryTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: "#F0DEC8",
+    marginTop: 8,
+    paddingTop: 14,
+    marginBottom: 16,
+  },
+  summaryTotalLabel: {
+    fontSize: 12,
+    color: "#8B6355",
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  summaryTotal: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#3E1F0D",
   },
   orderBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#D2691E",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#3E1F0D",
     borderRadius: 18,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    shadowColor: "#D2691E",
+    paddingVertical: 16,
+    shadowColor: "#3E1F0D",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 8,
+    elevation: 6,
   },
-  orderBtnText: { fontSize: 15, fontWeight: "800", color: "#FFF5E4" },
+  orderBtnText: { fontSize: 16, fontWeight: "800", color: "#FFF5E4" },
 
-  // Modal
+  // ── Modal ───────────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

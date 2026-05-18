@@ -43,6 +43,14 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Privacy & Security
+
+- User authentication is required to access Firestore and Storage data.
+- Firestore data is scoped to the authenticated user's `users/{uid}` document and subcollections.
+- Storage uploads are restricted to `profilePics/{uid}` and `productImages/{uid}` paths for the signed-in user.
+- Profile uploads and offline data are cached locally using AsyncStorage, and synced only when network connectivity returns.
+- Sensitive app data is not shared across users; each authenticated user manages only their own products, orders, and profile data.
+
 ## Get a fresh project
 
 When you're ready, run:

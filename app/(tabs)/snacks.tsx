@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-const CATEGORIES = ["All", "Cake", "Sandwich", "Cookies", "New"];
+const CATEGORIES = ["All", "Cake", "Sandwich", "Cookies"];
 
 export default function SnacksScreen() {
   const { products } = useCafe();

@@ -32,7 +32,7 @@ export default function SummaryPanel({
       {/* Header */}
       <View style={styles.panelHeader}>
         <View>
-          <Text style={styles.panelTitle}>Today's Summary</Text>
+          <Text style={styles.panelTitle}>Today&apos;s Summary</Text>
           <View style={styles.liveDot}>
             <View style={styles.dot} />
             <Text style={styles.liveText}>Live</Text>
@@ -63,7 +63,7 @@ export default function SummaryPanel({
           <Text style={styles.cardEmoji}>💰</Text>
         </View>
         <View style={styles.cardContent}>
-          <Text style={styles.cardLabel}>Today's Income</Text>
+          <Text style={styles.cardLabel}>Today&apos;s Income</Text>
           <Text style={[styles.cardValue, { color: "#2E7D32" }]}>
             ₱{todayIncome.toLocaleString()}
           </Text>

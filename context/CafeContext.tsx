@@ -1,13 +1,6 @@
-// ─── context/CafeContext.tsx ──────────────────────────────────────────────────
-// FIXED:
-//  • CartItem now has { product: Product; quantity: number; size: string }
-//  • updateCartQuantity / removeFromCart accept (id, size, delta)
-//  • placeOrder accepts customerName param
-//  • ADDED endShift() — deletes all orders from Firestore for the current user
-//  • Product.createdAt used to determine "New" tag expiry (24 hours)
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { auth, db } from "@/constants/firebase";
+import { auth, db, uploadImageAsync } from "@/constants/firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Network from "expo-network";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
@@ -48,6 +41,17 @@ export interface Product {
   createdAt: number;
 }
 
+export interface UserProfile {
+  uid: string;
+  fullName?: string;
+  email?: string;
+  gmail?: string;
+  cafeName?: string;
+  profilePic?: string;
+  photoURL?: string;
+  createdAt?: number;
+}
+
 // CartItem is a wrapper — product is nested, not spread
 export interface CartItem {
   product: Product;
@@ -68,6 +72,24 @@ export interface Order {
   createdAt: number;
 }
 
+interface AddProductPayload extends Omit<
+  Product,
+  "id" | "createdAt" | "isFavorite"
+> {
+  imageUri?: string;
+}
+
+type OfflineAction =
+  | { type: "addProduct"; payload: AddProductPayload }
+  | { type: "toggleFavorite"; payload: { id: string } }
+  | { type: "deleteProduct"; payload: { id: string } }
+  | {
+      type: "placeOrder";
+      payload: { customerName: string; cart: CartItem[]; total: number };
+    }
+  | { type: "updateOrderStatus"; payload: { id: string; status: OrderStatus } }
+  | { type: "uploadProfileImage"; payload: { uri: string } };
+
 // ── Context shape ─────────────────────────────────────────────────────────────
 
 interface CafeContextValue {
@@ -75,7 +97,7 @@ interface CafeContextValue {
 
   products: Product[];
   favorites: Set<string>;
-  addProduct: (data: Omit<Product, "id" | "createdAt" | "isFavorite">) => void;
+  addProduct: (data: AddProductPayload) => void;
   toggleFavorite: (id: string) => void;
   deleteProduct: (id: string) => void;
 
@@ -95,6 +117,12 @@ interface CafeContextValue {
   updateOrderStatus: (id: string, status: OrderStatus) => void;
   // ADDED: deletes all orders from Firestore — products are untouched
   endShift: () => Promise<void>;
+
+  userProfile: UserProfile | null;
+  uploadProfilePhoto: (uri: string) => Promise<void>;
+  isOffline: boolean;
+  syncPending: boolean;
+  queueLength: number;
 }
 
 const CafeContext = createContext<CafeContextValue | null>(null);
@@ -109,6 +137,22 @@ export function useCafe() {
 
 export function CafeProvider({ children }: { children: React.ReactNode }) {
   const [uid, setUid] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [syncPending, setSyncPending] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState<OfflineAction[]>([]);
+  const offlineQueueRef = useRef<OfflineAction[]>([]);
+  offlineQueueRef.current = offlineQueue;
+
+  const [cafeName, setCafeName] = useState("My Cafe");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  const cacheKey = (key: string) => `mycafe:${uid ?? "anon"}:${key}`;
+  // Returns true for URIs that are already stored (remote URL or Base64 data URI)
+  // so we don't re-encode them on every save.
+  const isRemoteUrl = (uri: string) =>
+    uri.startsWith("http://") ||
+    uri.startsWith("https://") ||
+    uri.startsWith("data:");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -117,10 +161,11 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, []);
 
-  const [cafeName, setCafeName] = useState("My Cafe");
-
   useEffect(() => {
-    if (!uid) { setCafeName("My Cafe"); return; }
+    if (!uid) {
+      setCafeName("My Cafe");
+      return;
+    }
     getDoc(doc(db, "users", uid)).then((snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -129,29 +174,232 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
     });
   }, [uid]);
 
+  // ── Offline queue & cache helpers ────────────────────────────────────────────
+  const persistQueue = async (queue: OfflineAction[]) => {
+    if (!uid) return;
+    await AsyncStorage.setItem(cacheKey("queue"), JSON.stringify(queue));
+  };
+
+  const persistCache = async (key: string, value: unknown) => {
+    if (!uid) return;
+    await AsyncStorage.setItem(cacheKey(key), JSON.stringify(value));
+  };
+
+  const loadCachedData = async () => {
+    if (!uid) return;
+
+    const keys = ["queue", "products", "orders", "cart", "profile"];
+    const values = await Promise.all(
+      keys.map((key) => AsyncStorage.getItem(cacheKey(key))),
+    );
+
+    if (values[0]) {
+      try {
+        setOfflineQueue(JSON.parse(values[0]));
+      } catch {
+        setOfflineQueue([]);
+      }
+    }
+
+    if (values[1]) {
+      try {
+        setProducts(JSON.parse(values[1]));
+      } catch {
+        setProducts([]);
+      }
+    }
+
+    if (values[2]) {
+      try {
+        setOrders(JSON.parse(values[2]));
+      } catch {
+        setOrders([]);
+      }
+    }
+
+    if (values[3]) {
+      try {
+        setCart(JSON.parse(values[3]));
+      } catch {
+        setCart([]);
+      }
+    }
+
+    if (values[4]) {
+      try {
+        setUserProfile(JSON.parse(values[4]));
+      } catch {
+        setUserProfile(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!uid) return;
+    loadCachedData();
+  }, [uid]);
+
+  useEffect(() => {
+    if (!uid) {
+      setProducts([]);
+      setOrders([]);
+      setCart([]);
+      setUserProfile(null);
+      setOfflineQueue([]);
+      setIsOffline(false);
+      return;
+    }
+  }, [uid]);
+
+  const runQueuedAction = async (action: OfflineAction) => {
+    if (!uid) return;
+    switch (action.type) {
+      case "addProduct": {
+        const payload = action.payload;
+        const productData = { ...payload, isFavorite: false };
+        if (payload.imageUri && !isRemoteUrl(payload.imageUri)) {
+          productData.imageUri = await uploadImageAsync(
+            payload.imageUri,
+            `productImages/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+          );
+        }
+        await addDoc(collection(db, "users", uid, "products"), {
+          ...productData,
+          createdAt: Date.now(),
+        });
+        break;
+      }
+      case "toggleFavorite": {
+        const { id } = action.payload;
+        const current = productsRef.current.find((p) => p.id === id);
+        if (!current) return;
+        await updateDoc(doc(db, "users", uid, "products", id), {
+          isFavorite: !current.isFavorite,
+        });
+        break;
+      }
+      case "deleteProduct": {
+        await deleteDoc(doc(db, "users", uid, "products", action.payload.id));
+        break;
+      }
+      case "placeOrder": {
+        await addDoc(collection(db, "users", uid, "orders"), {
+          items: action.payload.cart,
+          total: action.payload.total,
+          customerName: action.payload.customerName,
+          status: "Pending",
+          createdAt: serverTimestamp(),
+        });
+        break;
+      }
+      case "updateOrderStatus": {
+        await updateDoc(doc(db, "users", uid, "orders", action.payload.id), {
+          status: action.payload.status,
+        });
+        break;
+      }
+      case "uploadProfileImage": {
+        const downloadUrl = await uploadImageAsync(
+          action.payload.uri,
+          `profilePics/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+        );
+        await updateDoc(doc(db, "users", uid), {
+          profilePic: downloadUrl,
+        });
+        // Note: updateProfile(photoURL) is skipped — Firebase Auth has a URL
+        // length limit that a Base64 string would exceed. The profile pic is
+        // read from Firestore (userProfile.profilePic) instead.
+        break;
+      }
+    }
+  };
+
+  const flushQueue = async () => {
+    if (!uid || offlineQueueRef.current.length === 0 || isOffline) return;
+    setSyncPending(true);
+    const queue = [...offlineQueueRef.current];
+    setOfflineQueue([]);
+    await AsyncStorage.removeItem(cacheKey("queue"));
+
+    const failed: OfflineAction[] = [];
+    for (const action of queue) {
+      try {
+        await runQueuedAction(action);
+      } catch {
+        failed.push(action);
+      }
+    }
+
+    if (failed.length > 0) {
+      setOfflineQueue(failed);
+      await persistQueue(failed);
+    }
+
+    setSyncPending(false);
+  };
+
+  useEffect(() => {
+    const subscribe = async () => {
+      const state = await Network.getNetworkStateAsync();
+      setIsOffline(!state.isConnected);
+      if (state.isConnected) {
+        flushQueue();
+      }
+      const listener = Network.addNetworkStateListener((next) => {
+        const offline = !next.isConnected;
+        setIsOffline(offline);
+        if (!offline) flushQueue();
+      });
+      return () => listener.remove?.();
+    };
+    subscribe();
+  }, [uid]);
+
   // ── Products ──────────────────────────────────────────────────────────────
   const [products, setProducts] = useState<Product[]>([]);
   const productsRef = useRef<Product[]>([]);
   productsRef.current = products;
 
   useEffect(() => {
-    if (!uid) { setProducts([]); return; }
+    if (!uid) {
+      setProducts([]);
+      return;
+    }
     const q = query(
       collection(db, "users", uid, "products"),
       orderBy("createdAt", "desc"),
     );
     const unsub = onSnapshot(q, (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Product));
+      const freshProducts = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Product,
+      );
+      setProducts(freshProducts);
+      persistCache("products", freshProducts);
     });
     return unsub;
   }, [uid]);
 
-  const addProduct = async (
-    data: Omit<Product, "id" | "createdAt" | "isFavorite">,
-  ) => {
+  const addProduct = async (data: AddProductPayload) => {
     if (!uid) return;
+    const action: OfflineAction = { type: "addProduct", payload: data };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      return;
+    }
+
+    const payload = { ...data };
+    if (payload.imageUri && !isRemoteUrl(payload.imageUri)) {
+      payload.imageUri = await uploadImageAsync(
+        payload.imageUri,
+        `productImages/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+      );
+    }
     await addDoc(collection(db, "users", uid, "products"), {
-      ...data,
+      ...payload,
       isFavorite: false,
       createdAt: Date.now(),
     });
@@ -159,6 +407,16 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
 
   const toggleFavorite = async (id: string) => {
     if (!uid) return;
+    const action: OfflineAction = { type: "toggleFavorite", payload: { id } };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      return;
+    }
+
     const product = productsRef.current.find((p) => p.id === id);
     if (!product) return;
     await updateDoc(doc(db, "users", uid, "products", id), {
@@ -168,6 +426,15 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProduct = async (id: string) => {
     if (!uid) return;
+    const action: OfflineAction = { type: "deleteProduct", payload: { id } };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      return;
+    }
     await deleteDoc(doc(db, "users", uid, "products", id));
   };
 
@@ -179,6 +446,11 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
 
   // ── Cart ──────────────────────────────────────────────────────────────────
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  useEffect(() => {
+    if (!uid) return;
+    persistCache("cart", cart);
+  }, [cart, uid]);
 
   const cartCount = useMemo(
     () => cart.reduce((s, i) => s + i.quantity, 0),
@@ -229,31 +501,44 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    if (!uid) { setOrders([]); return; }
+    if (!uid) {
+      setOrders([]);
+      return;
+    }
     const q = query(
       collection(db, "users", uid, "orders"),
       orderBy("createdAt", "desc"),
     );
     const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Order));
+      const freshOrders = snap.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as Order,
+      );
+      setOrders(freshOrders);
+      persistCache("orders", freshOrders);
     });
     return unsub;
   }, [uid]);
 
   const placeOrder = async (customerName: string) => {
     if (!uid || cart.length === 0) return;
-    const now = new Date();
-    const time = now.toLocaleTimeString("en-PH", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    const orderNumber = orders.length + 1;
+    const action: OfflineAction = {
+      type: "placeOrder",
+      payload: { customerName, cart, total: cartTotal },
+    };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      clearCart();
+      return;
+    }
+
     await addDoc(collection(db, "users", uid, "orders"), {
       items: cart,
       total: cartTotal,
       customerName,
-      orderNumber,
-      time,
       status: "Pending" as OrderStatus,
       createdAt: serverTimestamp(),
     });
@@ -262,6 +547,18 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
 
   const updateOrderStatus = async (id: string, status: OrderStatus) => {
     if (!uid) return;
+    const action: OfflineAction = {
+      type: "updateOrderStatus",
+      payload: { id, status },
+    };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      return;
+    }
     await updateDoc(doc(db, "users", uid, "orders", id), { status });
   };
 
@@ -271,12 +568,70 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
     const snap = await getDocs(collection(db, "users", uid, "orders"));
     const deletions = snap.docs.map((d) => deleteDoc(d.ref));
     await Promise.all(deletions);
-    // local state is cleared immediately via the onSnapshot listener,
-    // but also clear it here so the UI responds instantly
     setOrders([]);
   };
 
-  // ── Favorites ─────────────────────────────────────────────────────────────
+  // ── User profile ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!uid) {
+      setUserProfile(null);
+      return;
+    }
+    const unsub = onSnapshot(doc(db, "users", uid), (snap) => {
+      const currentUser = auth.currentUser;
+      if (snap.exists()) {
+        const data = snap.data() as UserProfile;
+        const profileData: UserProfile = {
+          ...data,
+          uid: data.uid || uid,
+          fullName: data.fullName || currentUser?.displayName || undefined,
+          gmail: data.gmail || data.email || currentUser?.email || undefined,
+          email: data.gmail || data.email || currentUser?.email || undefined,
+          // Fall back to Firebase Auth's Google photo if Firestore doesn't have one
+          profilePic: data.profilePic || currentUser?.photoURL || undefined,
+          photoURL: data.photoURL || currentUser?.photoURL || undefined,
+        };
+        setUserProfile(profileData);
+        persistCache("profile", profileData);
+      } else if (currentUser) {
+        const profileData: UserProfile = {
+          uid,
+          fullName: currentUser.displayName || undefined,
+          gmail: currentUser.email || undefined,
+          email: currentUser.email || undefined,
+          photoURL: currentUser.photoURL || undefined,
+        };
+        setUserProfile(profileData);
+        persistCache("profile", profileData);
+      }
+    });
+    return unsub;
+  }, [uid]);
+
+  const uploadProfilePhoto = async (uri: string) => {
+    if (!uid) return;
+    const action: OfflineAction = {
+      type: "uploadProfileImage",
+      payload: { uri },
+    };
+    if (isOffline) {
+      setOfflineQueue((prev) => {
+        const next = [...prev, action];
+        persistQueue(next);
+        return next;
+      });
+      return;
+    }
+
+    const downloadUrl = await uploadImageAsync(
+      uri,
+      `profilePics/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`,
+    );
+    await updateDoc(doc(db, "users", uid), { profilePic: downloadUrl });
+    // Note: updateProfile(photoURL) skipped — Base64 strings exceed Firebase
+    // Auth's photoURL length limit. Profile pic is read from Firestore instead.
+  };
+
   const favorites = useMemo(
     () => new Set(products.filter((p) => p.isFavorite).map((p) => p.id)),
     [products],
@@ -301,6 +656,11 @@ export function CafeProvider({ children }: { children: React.ReactNode }) {
     placeOrder,
     updateOrderStatus,
     endShift,
+    userProfile,
+    uploadProfilePhoto,
+    isOffline,
+    syncPending,
+    queueLength: offlineQueue.length,
   };
 
   return <CafeContext.Provider value={value}>{children}</CafeContext.Provider>;

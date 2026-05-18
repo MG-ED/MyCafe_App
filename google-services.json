@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "536703139609",
+    "project_id": "mycafe-pos-b8fbd",
+    "storage_bucket": "mycafe-pos-b8fbd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:536703139609:android:bdaaeb3c802a260b888f88",
+        "android_client_info": {
+          "package_name": "com.mycafe.pos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "536703139609-iv25pifmnraphscmrd60gmcp7hls03fh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgzHrlgYhPIUpnde5i2nWmWipycHPEMqA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "536703139609-iv25pifmnraphscmrd60gmcp7hls03fh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

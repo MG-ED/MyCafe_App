@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 
-const SIZE_FILTERS = ["All", "Hot", "Iced", "Classic", "New"];
+const SIZE_FILTERS = ["All", "Hot", "Iced", "Classic"];
 
 export default function DrinksScreen() {
   const { products } = useCafe();

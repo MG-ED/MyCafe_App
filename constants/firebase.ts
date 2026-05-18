@@ -1,11 +1,5 @@
-// ─── firebase.ts ─────────────────────────────────────────────────────────────
-// BUG FIX: initializeAuth() threw "auth/already-initialized" on hot reload
-// because getApps() only guards initializeApp(), not initializeAuth().
-// Fix: wrap initializeAuth in try/catch and fall back to getAuth() if already
-// initialized.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImageManipulator from "expo-image-manipulator";
 import { getApp, getApps, initializeApp } from "firebase/app";
 import {
   Auth,
@@ -37,6 +31,28 @@ try {
 } catch {
   // Already initialized — reuse existing instance
   auth = getAuth(app);
+}
+export async function uploadImageAsync(
+  uri: string,
+  destinationPath: string,
+): Promise<string> {
+  const isProfilePic = destinationPath.startsWith("profilePics/");
+
+  const manipulated = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: isProfilePic ? 400 : 800 } }],
+    {
+      compress: isProfilePic ? 0.7 : 0.6,
+      format: ImageManipulator.SaveFormat.JPEG,
+      base64: true,
+    },
+  );
+
+  if (!manipulated.base64) {
+    throw new Error("Image encoding failed: base64 output is empty.");
+  }
+
+  return `data:image/jpeg;base64,${manipulated.base64}`;
 }
 
 export { auth };

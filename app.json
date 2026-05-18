@@ -32,8 +32,15 @@
           "imageWidth": 200,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
+    "extra": {
+      "googleWebClientId": "",
+      "googleIosClientId": "",
+      "googleAndroidClientId": "465844142916-20d1vkepbovt7p8nrra0v127vq106052.apps.googleusercontent.com"
+    },
     "experiments": {
       "typedRoutes": true
     }

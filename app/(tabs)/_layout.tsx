@@ -13,7 +13,13 @@ import { Tabs } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type TabName = "index" | "drinks" | "snacks" | "favorites" | "cart" | "orders";
+type TabName =
+  | "index"
+  | "drinks"
+  | "snacks"
+  | "favorites"
+  | "profile"
+  | "orders";
 
 const TAB_CONFIG: Record<
   TabName,
@@ -23,7 +29,7 @@ const TAB_CONFIG: Record<
   drinks: { icon: "coffee", label: "Drinks" },
   snacks: { icon: "box", label: "Snacks" },
   favorites: { icon: "heart", label: "Favs" },
-  cart: { icon: "shopping-cart", label: "Cart" },
+  profile: { icon: "user", label: "Profile" },
   orders: { icon: "file-text", label: "Orders" },
 };
 
@@ -122,7 +128,7 @@ export default function TabLayout() {
       <Tabs.Screen name="drinks" options={{ title: "Drinks" }} />
       <Tabs.Screen name="snacks" options={{ title: "Snacks" }} />
       <Tabs.Screen name="favorites" options={{ title: "Favorites" }} />
-      <Tabs.Screen name="cart" options={{ title: "Cart" }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       <Tabs.Screen name="orders" options={{ title: "Orders" }} />
     </Tabs>
   );

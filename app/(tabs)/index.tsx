@@ -6,13 +6,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import AddProductModal from "@/components/AddProductModal";
+import OfflineBanner from "@/components/OfflineBanner";
 import ProductCard from "@/components/ProductCard";
 import { auth } from "@/constants/firebase";
 import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -24,13 +25,47 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
-  const { products, cartCount, orders, cafeName } = useCafe();
+  const { products, favorites, cartCount, orders, cafeName, isOffline } =
+    useCafe();
   const insets = useSafeAreaInsets();
   const [showAddModal, setShowAddModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
 
   const allProducts = [...products].sort((a, b) => b.createdAt - a.createdAt);
+  const recommended = useMemo(() => {
+    const frequency = orders
+      .flatMap((order) => order.items)
+      .reduce<Record<string, number>>((acc, item) => {
+        acc[item.product.id] = (acc[item.product.id] || 0) + item.quantity;
+        return acc;
+      }, {});
+
+    return allProducts
+      .map((product) => {
+        const orderScore = frequency[product.id] ?? 0;
+        const timeScore =
+          new Date().getHours() < 12
+            ? product.category === "drinks"
+              ? 3
+              : 1
+            : new Date().getHours() >= 18
+              ? product.category === "drinks"
+                ? 3
+                : 2
+              : 2;
+        const favoriteScore = favorites.has(product.id) ? 2 : 0;
+        const newScore = product.tag?.toLowerCase().includes("new") ? 1 : 0;
+
+        return {
+          product,
+          score: orderScore * 4 + timeScore + favoriteScore + newScore,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map((item) => item.product);
+  }, [allProducts, favorites, orders]);
   const drinks = allProducts.filter((p) => p.category === "drinks");
   const snacks = allProducts.filter((p) => p.category === "snacks");
 
@@ -39,12 +74,12 @@ export default function HomeScreen() {
     .reduce((sum, o) => sum + o.total, 0);
 
   const hour = new Date().getHours();
-  const greeting =
-    hour < 12
-      ? "Good morning ☀️"
-      : hour < 18
-        ? "Good afternoon 🌤️"
-        : "Good evening 🌙";
+  const greeting = useMemo(() => {
+    if (hour >= 5 && hour < 12) return "Good morning ☀️";
+    if (hour >= 12 && hour < 17) return "Good afternoon 🌤️";
+    if (hour >= 17 && hour < 21) return "Good evening 🌙";
+    return "Good night 🌙";
+  }, [hour]);
 
   // ── Logout handler ────────────────────────────────────────────────────────
   const handleLogout = () => {
@@ -75,6 +110,8 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        <OfflineBanner isOffline={isOffline} />
+
         {/* ── Header ── */}
         <View style={styles.header}>
           <View>
@@ -114,6 +151,26 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {recommended.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Smart Suggestions</Text>
+            <Text style={styles.sectionHint}>
+              Based on recent orders and time of day
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 12 }}
+            >
+              <View style={styles.hGrid}>
+                {recommended.map((product) => (
+                  <ProductCard key={product.id} product={product} compact />
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
 
         {/* ── Stats ── */}
         <View style={styles.stats}>
@@ -323,6 +380,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionTitle: { fontSize: 18, fontWeight: "800", color: "#3E1F0D" },
+  sectionHint: { fontSize: 12, color: "#8B6355", marginTop: 4 },
   seeAll: { fontSize: 13, color: "#8B4513", fontWeight: "600" },
   addProductBtn: {
     flexDirection: "row",
