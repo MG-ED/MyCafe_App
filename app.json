@@ -11,14 +11,13 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.mycafe.pos",
+      "googleServicesFile": "./google-services.json",
+      "newArchEnabled": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/MyCafe_Logo.png",
-        "backgroundImage": "./assets/MyCafe_Logo.png",
-        "monochromeImage": "./assets/MyCafe_Logo.png"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.edmgph.MyCAFE"
+        "backgroundColor": "#ffffff"
+      }
     },
     "web": {
       "output": "single",
@@ -49,6 +48,12 @@
     },
     "experiments": {
       "typedRoutes": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/09dae096-878d-4ebb-bb32-0b4940942dc1"
     }
   }
 }
