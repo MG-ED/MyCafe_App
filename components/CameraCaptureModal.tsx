@@ -1,5 +1,7 @@
-import { Camera } from "expo-camera";
-import CameraView from "expo-camera/build/CameraView";
+// BUG FIX: CameraView was imported from the internal build path
+// "expo-camera/build/CameraView" which is fragile and breaks across SDK
+// upgrades. The correct public API is a named export from "expo-camera".
+import { Camera, CameraView } from "expo-camera";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,9 +35,15 @@ export default function CameraCaptureModal({
 
   useEffect(() => {
     if (!visible) return;
-    Camera.requestCameraPermissionsAsync().then(({ status }) => {
-      setPermissionStatus(status === "granted" ? "granted" : "denied");
-    });
+    // BUG FIX: Added .catch() so a permission API error doesn't cause an
+    // UnhandledPromiseRejection (treats the error as denied).
+    Camera.requestCameraPermissionsAsync()
+      .then(({ status }) => {
+        setPermissionStatus(status === "granted" ? "granted" : "denied");
+      })
+      .catch(() => {
+        setPermissionStatus("denied");
+      });
   }, [visible]);
 
   const handleTakePhoto = async () => {
@@ -63,7 +71,12 @@ export default function CameraCaptureModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.header}>
@@ -73,7 +86,18 @@ export default function CameraCaptureModal({
             </TouchableOpacity>
           </View>
 
-          {permissionStatus === "denied" ? (
+          {permissionStatus === null ? (
+            // BUG FIX: permissionStatus starts as null while the permission
+            // dialog is pending. Previously the else branch (CameraView) was
+            // rendered immediately, mounting the camera before permission was
+            // granted or denied. Now we show a loading indicator instead.
+            <View style={styles.permissionBox}>
+              <ActivityIndicator size="large" color="#C8793A" />
+              <Text style={[styles.permissionText, { marginTop: 12 }]}>
+                Requesting camera permission…
+              </Text>
+            </View>
+          ) : permissionStatus === "denied" ? (
             <View style={styles.permissionBox}>
               <Text style={styles.permissionText}>
                 Camera permission is required to capture your profile photo.

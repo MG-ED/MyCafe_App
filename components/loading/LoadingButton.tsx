@@ -1,24 +1,24 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from "react";
 import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
   Animated,
   Easing,
-  ViewStyle,
+  StyleSheet,
+  Text,
   TextStyle,
-} from 'react-native';
+  TouchableOpacity,
+  ViewStyle,
+} from "react-native";
 
 // ─── Brand palette ────────────────────────────────────────────────────────
 const C = {
-  caramel:   '#C8793A',
-  caramelDim:'#A0612E',
-  cream:     '#FAF3E0',
-  disabled:  '#D4C4B0',
-  espresso:  '#2C1A0E',
+  caramel: "#C8793A",
+  caramelDim: "#A0612E",
+  cream: "#FAF3E0",
+  disabled: "#D4C4B0",
+  espresso: "#2C1A0E",
 };
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 interface LoadingButtonProps {
   label: string;
@@ -34,9 +34,9 @@ interface LoadingButtonProps {
 export default function LoadingButton({
   label,
   onPress,
-  loading  = false,
+  loading = false,
   disabled = false,
-  variant  = 'primary',
+  variant = "primary",
   style,
   labelStyle,
   fullWidth = false,
@@ -45,16 +45,19 @@ export default function LoadingButton({
   const pressAnim = useRef(new Animated.Value(1)).current;
 
   const spin = spinValue.interpolate({
-    inputRange:  [0, 1],
-    outputRange: ['0deg', '360deg'],
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
   });
 
   useEffect(() => {
     if (loading) {
       Animated.loop(
         Animated.timing(spinValue, {
-          toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true,
-        })
+          toValue: 1,
+          duration: 800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
       ).start();
     } else {
       spinValue.stopAnimation();
@@ -63,33 +66,39 @@ export default function LoadingButton({
   }, [loading, spinValue]);
 
   const handlePressIn = () =>
-    Animated.spring(pressAnim, { toValue: 0.96, useNativeDriver: true }).start();
+    Animated.spring(pressAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+    }).start();
 
   const handlePressOut = () =>
     Animated.spring(pressAnim, { toValue: 1, useNativeDriver: true }).start();
 
   const isDisabled = disabled || loading;
 
-  const variantStyles: Record<ButtonVariant, { container: ViewStyle; label: TextStyle }> = {
+  const variantStyles: Record<
+    ButtonVariant,
+    { container: ViewStyle; label: TextStyle }
+  > = {
     primary: {
       container: { backgroundColor: isDisabled ? C.disabled : C.caramel },
-      label:     { color: C.cream },
+      label: { color: C.cream },
     },
     secondary: {
       container: {
-        backgroundColor: 'transparent',
+        backgroundColor: "transparent",
         borderWidth: 2,
         borderColor: isDisabled ? C.disabled : C.caramel,
       },
       label: { color: isDisabled ? C.disabled : C.caramel },
     },
     ghost: {
-      container: { backgroundColor: 'transparent' },
-      label:     { color: isDisabled ? C.disabled : C.caramel },
+      container: { backgroundColor: "transparent" },
+      label: { color: isDisabled ? C.disabled : C.caramel },
     },
     danger: {
-      container: { backgroundColor: isDisabled ? C.disabled : '#C0392B' },
-      label:     { color: C.cream },
+      container: { backgroundColor: isDisabled ? C.disabled : "#C0392B" },
+      label: { color: C.cream },
     },
   };
 
@@ -114,7 +123,9 @@ export default function LoadingButton({
         ]}
       >
         {loading && (
-          <Animated.View style={[styles.spinner, { transform: [{ rotate: spin }] }]} />
+          <Animated.View
+            style={[styles.spinner, { transform: [{ rotate: spin }] }]}
+          />
         )}
         <Text
           style={[
@@ -124,7 +135,7 @@ export default function LoadingButton({
             labelStyle,
           ]}
         >
-          {loading ? label : label}
+          {label}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -133,9 +144,9 @@ export default function LoadingButton({
 
 const styles = StyleSheet.create({
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 14,
@@ -147,19 +158,19 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   fullWidth: {
-    width: '100%',
+    width: "100%",
   },
   spinner: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderTopColor: '#fff',
+    borderColor: "rgba(255,255,255,0.3)",
+    borderTopColor: "#fff",
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.5,
   },
   labelWithSpinner: {

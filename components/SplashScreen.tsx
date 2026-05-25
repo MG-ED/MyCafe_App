@@ -1,15 +1,34 @@
+// ─── components/SplashScreen.tsx ─────────────────────────────────────────────
+// FIX: Replaced module-level `const { width, height } = Dimensions.get("window")`
+// with the `useWindowDimensions()` hook called INSIDE the component.
+//
+// Root cause of the white/blank screen on web:
+//   The original code ran Dimensions.get("window") synchronously when the
+//   module was first evaluated by the bundler. On web, this can return
+//   { width: 0, height: 0 } because the browser hasn't finished laying out
+//   the page at the time the JS bundle runs (before first paint).
+//
+//   The StyleSheet used those 0-values for the container's `width` and `height`
+//   properties. React Native's Yoga layout engine treats explicit width/height
+//   as higher priority than flex growth — so even with `flex: 1` on the
+//   container, the explicit `width: 0, height: 0` won and the SplashScreen
+//   was physically 0×0 pixels. Nothing was visible; the browser's white default
+//   page background showed through, making it look like a crash.
+//
+//   useWindowDimensions() is reactive: it always reflects the real viewport
+//   size inside a rendered component, guaranteed to be correct on web.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
-  Dimensions,
   Easing,
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
-
-const { width, height } = Dimensions.get("window");
 
 // ─── Café brand palette ────────────────────────────────────────────────────
 const COLORS = {
@@ -26,17 +45,19 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ onFinish }: SplashScreenProps) {
+  // FIX: use hook — always returns the correct window size after first render
+  const { width, height } = useWindowDimensions();
+
   // ── Animated values ────────────────────────────────────────────────────
-  const fadeAnim = useRef(new Animated.Value(0)).current; // whole screen fade-in
-  const fadeOutAnim = useRef(new Animated.Value(1)).current; // whole screen fade-out
-  const scaleAnim = useRef(new Animated.Value(0.7)).current; // logo zoom
+  const fadeOutAnim = useRef(new Animated.Value(1)).current; // container fade-out
+  const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const titleOpacity = useRef(new Animated.Value(0)).current;
   const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const spinValue = useRef(new Animated.Value(0)).current; // spinner rotation
-  const progressAnim = useRef(new Animated.Value(0)).current; // progress bar
+  const spinValue = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Cup steam wiggles
+  // Steam wisp animated values
   const steam1Y = useRef(new Animated.Value(0)).current;
   const steam1Op = useRef(new Animated.Value(0)).current;
   const steam2Y = useRef(new Animated.Value(0)).current;
@@ -44,13 +65,11 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
   const steam3Y = useRef(new Animated.Value(0)).current;
   const steam3Op = useRef(new Animated.Value(0)).current;
 
-  // ── Derived: spinner rotation 0→360 ───────────────────────────────────
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
   });
 
-  // ── Steam loop helper ──────────────────────────────────────────────────
   const steamLoop = (
     yVal: Animated.Value,
     opVal: Animated.Value,
@@ -94,16 +113,8 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       ]),
     );
 
-  // ── Main animation sequence ────────────────────────────────────────────
   useEffect(() => {
-    // 1. Screen fades in
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 400,
-      useNativeDriver: true,
-    }).start();
-
-    // 2. Logo & title stagger in
+    // Logo + title stagger in
     Animated.sequence([
       Animated.delay(200),
       Animated.parallel([
@@ -133,7 +144,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       }),
     ]).start();
 
-    // 3. Spinner
+    // Spinner
     Animated.loop(
       Animated.timing(spinValue, {
         toValue: 1,
@@ -143,7 +154,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       }),
     ).start();
 
-    // 4. Progress bar fills over the FULL 3 s — matches exactly when we navigate
+    // Progress bar (3 s total — matches the fade-out timer below)
     Animated.timing(progressAnim, {
       toValue: 1,
       duration: 3000,
@@ -151,12 +162,15 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       useNativeDriver: false,
     }).start();
 
-    // 5. Steam wisps
-    steamLoop(steam1Y, steam1Op, 0).start();
-    steamLoop(steam2Y, steam2Op, 400).start();
-    steamLoop(steam3Y, steam3Op, 800).start();
+    // Steam wisps
+    const s1 = steamLoop(steam1Y, steam1Op, 0);
+    const s2 = steamLoop(steam2Y, steam2Op, 400);
+    const s3 = steamLoop(steam3Y, steam3Op, 800);
+    s1.start();
+    s2.start();
+    s3.start();
 
-    // 6. After 3 s (bar = 100%): fade out → navigate
+    // After 3 s: fade out → call onFinish
     const timer = setTimeout(() => {
       Animated.timing(fadeOutAnim, {
         toValue: 0,
@@ -168,7 +182,15 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
       });
     }, 3000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      s1.stop();
+      s2.stop();
+      s3.stop();
+      spinValue.stopAnimation();
+      progressAnim.stopAnimation();
+      fadeOutAnim.stopAnimation();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -178,26 +200,47 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
   });
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeOutAnim }]}>
+    <Animated.View
+      style={[
+        styles.container,
+        // FIX: pass width/height from the hook — always the real viewport size
+        { width, height, opacity: fadeOutAnim },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.espresso} />
 
-      {/* ── Decorative background circles ── */}
-      <View style={[styles.bgCircle, styles.bgCircleLarge]} />
-      <View style={[styles.bgCircle, styles.bgCircleSmall]} />
+      {/* Decorative background circles — sized relative to viewport width */}
+      <View
+        style={[
+          styles.bgCircle,
+          {
+            width: width * 1.4,
+            height: width * 1.4,
+            top: -width * 0.5,
+            left: -width * 0.2,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.bgCircle,
+          {
+            width: width * 0.8,
+            height: width * 0.8,
+            bottom: -width * 0.3,
+            right: -width * 0.2,
+          },
+        ]}
+      />
 
-      {/* ── Logo area ── */}
+      {/* Logo */}
       <Animated.View
         style={[
           styles.logoWrapper,
-          {
-            opacity: logoOpacity,
-            transform: [{ scale: scaleAnim }],
-          },
+          { opacity: logoOpacity, transform: [{ scale: scaleAnim }] },
         ]}
       >
-        {/* Coffee cup SVG-style drawn in pure RN */}
         <View style={styles.cupContainer}>
-          {/* Steam wisps */}
           {[
             { y: steam1Y, op: steam1Op, left: 18 },
             { y: steam2Y, op: steam2Op, left: 30 },
@@ -215,34 +258,28 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
               ]}
             />
           ))}
-
-          {/* Cup body */}
           <View style={styles.cupBody}>
             <View style={styles.cupTop}>
               <View style={styles.coffeeLevel} />
             </View>
             <View style={styles.cupBottom} />
           </View>
-
-          {/* Handle */}
           <View style={styles.cupHandle} />
-
-          {/* Saucer */}
           <View style={styles.saucer} />
         </View>
       </Animated.View>
 
-      {/* ── App name ── */}
+      {/* App name */}
       <Animated.Text style={[styles.appName, { opacity: titleOpacity }]}>
         MyCafe
       </Animated.Text>
 
-      {/* ── Tagline ── */}
+      {/* Tagline */}
       <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
         Smart Café Management
       </Animated.Text>
 
-      {/* ── Spinner + progress bar ── */}
+      {/* Spinner + progress */}
       <Animated.View
         style={[styles.loaderSection, { opacity: taglineOpacity }]}
       >
@@ -251,54 +288,31 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
         >
           <View style={styles.spinnerInner} />
         </Animated.View>
-
         <View style={styles.progressTrack}>
           <Animated.View
             style={[styles.progressFill, { width: progressWidth }]}
           />
         </View>
-
         <Text style={styles.loadingText}>Brewing your experience…</Text>
       </Animated.View>
     </Animated.View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.espresso,
     alignItems: "center",
     justifyContent: "center",
-    width,
-    height,
+    // width and height are applied inline via useWindowDimensions() hook
   },
-
-  // Background decorative circles
   bgCircle: {
     position: "absolute",
     borderRadius: 999,
     backgroundColor: COLORS.steamDark,
   },
-  bgCircleLarge: {
-    width: width * 1.4,
-    height: width * 1.4,
-    top: -width * 0.5,
-    left: -width * 0.2,
-  },
-  bgCircleSmall: {
-    width: width * 0.8,
-    height: width * 0.8,
-    bottom: -width * 0.3,
-    right: -width * 0.2,
-  },
-
-  // Cup
-  logoWrapper: {
-    marginBottom: 28,
-    alignItems: "center",
-  },
+  logoWrapper: { marginBottom: 28, alignItems: "center" },
   cupContainer: {
     width: 72,
     height: 80,
@@ -313,11 +327,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: COLORS.steam,
   },
-  cupBody: {
-    width: 60,
-    alignItems: "center",
-    marginTop: 16,
-  },
+  cupBody: { width: 60, alignItems: "center", marginTop: 16 },
   cupTop: {
     width: 60,
     height: 40,
@@ -326,11 +336,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     justifyContent: "flex-start",
   },
-  coffeeLevel: {
-    width: "100%",
-    height: 12,
-    backgroundColor: "#5C3317",
-  },
+  coffeeLevel: { width: "100%", height: 12, backgroundColor: "#5C3317" },
   cupBottom: {
     width: 48,
     height: 6,
@@ -356,8 +362,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginTop: 2,
   },
-
-  // Text
   appName: {
     fontSize: 42,
     fontWeight: "800",
@@ -373,12 +377,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 48,
   },
-
-  // Loader
-  loaderSection: {
-    alignItems: "center",
-    gap: 14,
-  },
+  loaderSection: { alignItems: "center", gap: 14 },
   spinner: {
     width: 36,
     height: 36,
@@ -387,9 +386,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.steamDark,
     borderTopColor: COLORS.caramel,
   },
-  spinnerInner: {
-    // just a placeholder for the border-only spinner
-  },
+  spinnerInner: {},
   progressTrack: {
     width: 200,
     height: 5,

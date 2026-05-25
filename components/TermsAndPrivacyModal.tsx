@@ -30,7 +30,12 @@ export default function TermsAndPrivacyModal({
   }, [visible]);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onReject}
+    >
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.header}>

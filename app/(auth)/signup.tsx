@@ -13,7 +13,11 @@ import {
 import { useRateLimiter } from "@/hooks/useRateLimiter";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  updateProfile,
+} from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
@@ -21,7 +25,6 @@ import {
   Alert,
   Dimensions,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -29,7 +32,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import Svg, {
@@ -190,6 +192,17 @@ const meterS = StyleSheet.create({
   req: { fontSize: 11, color: "rgba(212,169,106,0.65)" },
 });
 
+// ── Gmail domain validator ────────────────────────────────────────────────────
+
+function validateGmailDomain(email: string): string | null {
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed) return null; // let the required/format check handle empty
+  if (!trimmed.endsWith("@gmail.com")) {
+    return "Only Gmail accounts (@gmail.com) are accepted.";
+  }
+  return null;
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 type FormKey = "fullName" | "gmail" | "cafeName" | "password";
@@ -238,11 +251,13 @@ export default function SignupScreen() {
 
     const nameErr = validateFullName(form.fullName);
     const emailErr = validateEmail(form.gmail);
+    const gmailErr = emailErr ? null : validateGmailDomain(form.gmail);
     const cafeErr = validateCafeName(form.cafeName);
     const passwordErr = validatePassword(form.password);
 
     if (nameErr) e.fullName = nameErr;
     if (emailErr) e.gmail = emailErr;
+    else if (gmailErr) e.gmail = gmailErr;
     if (cafeErr) e.cafeName = cafeErr;
     if (passwordErr) e.password = passwordErr;
 
@@ -286,10 +301,16 @@ export default function SignupScreen() {
         cafeName: cleanCafeName,
         termsAcceptedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
-        // Never store password or any sensitive raw input
+      });
+
+      // Send verification email in the background — do NOT block navigation
+      sendEmailVerification(credential.user).catch(() => {
+        // Silent fail — user can request resend from within the app
       });
 
       await rl.recordSuccess(cleanEmail);
+
+      // Navigate to the app immediately; email verification is not mandatory
       router.replace("/(tabs)");
     } catch (error: any) {
       await rl.recordFailure(cleanEmail);
@@ -352,143 +373,172 @@ export default function SignupScreen() {
       label: "PASSWORD",
       placeholder: "• • • • • •",
       secure: true,
-      autoComplete: "new-password",
-      textContentType: "newPassword",
+      autoComplete: "off",
+      textContentType: "none",
     },
   ];
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: C.espressoDark }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <SignupBackground />
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoRing}>
-              <Image
-                source={require("../../assets/MyCafe_Logo.png")}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.title}>Create account</Text>
-            <Text style={styles.subtitle}>Create your MyCafe account</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.logoRing}>
+            <Image
+              source={require("../../assets/MyCafe_Logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
+          <Text style={styles.title}>Create account</Text>
+          <Text style={styles.subtitle}>Create your MyCafe account</Text>
+        </View>
 
-          {/* Form */}
-          <View style={styles.form}>
-            {fields.map((field) => (
-              <View key={field.key} style={styles.inputGroup}>
-                <Text style={styles.label}>{field.label}</Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    focused === field.key && styles.inputFocused,
-                    errors[field.key] && styles.inputError,
-                    isFormDisabled && styles.inputDisabled,
-                  ]}
-                >
-                  <TextInput
-                    style={styles.input}
-                    placeholder={field.placeholder}
-                    placeholderTextColor="rgba(212,169,106,0.4)"
-                    value={form[field.key]}
-                    onChangeText={(v) => updateForm(field.key, v)}
-                    onFocus={() => setFocused(field.key)}
-                    onBlur={() => setFocused(null)}
-                    autoCapitalize={field.autoCapitalize ?? "none"}
-                    autoCorrect={false}
-                    autoComplete={field.autoComplete}
-                    textContentType={field.textContentType}
-                    keyboardType={field.keyboardType ?? "default"}
-                    secureTextEntry={field.secure && !showPass}
-                    editable={!isFormDisabled}
-                    spellCheck={false}
-                  />
-                  {field.secure && (
-                    <TouchableOpacity
-                      onPress={() => setShowPass(!showPass)}
-                      disabled={isFormDisabled}
-                    >
-                      <Text style={styles.showHide}>
-                        {showPass ? "Hide" : "Show"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* Password strength meter (only for password field) */}
-                {field.key === "password" &&
-                  pwStrength &&
-                  form.password.length > 0 && (
-                    <PasswordStrengthMeter strength={pwStrength} />
-                  )}
-
-                {errors[field.key] ? (
-                  <Text style={styles.errorText}>⚠ {errors[field.key]}</Text>
-                ) : null}
+        {/* Form */}
+        <View style={styles.form}>
+          {fields.map((field) => (
+            <View key={field.key} style={styles.inputGroup}>
+              <Text style={styles.label}>{field.label}</Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  focused === field.key && styles.inputFocused,
+                  errors[field.key] && styles.inputError,
+                  isFormDisabled && styles.inputDisabled,
+                ]}
+              >
+                <TextInput
+                  style={styles.input}
+                  placeholder={field.placeholder}
+                  placeholderTextColor="rgba(212,169,106,0.4)"
+                  value={form[field.key]}
+                  onChangeText={(v) => updateForm(field.key, v)}
+                  onFocus={() => setFocused(field.key)}
+                  onBlur={() => {
+                    setFocused(null);
+                    if (field.key === "gmail") {
+                      const gmailErr = validateGmailDomain(form.gmail);
+                      if (gmailErr) {
+                        setErrors((prev) => ({ ...prev, gmail: gmailErr }));
+                      }
+                    }
+                  }}
+                  autoCapitalize={field.autoCapitalize ?? "none"}
+                  autoCorrect={false}
+                  autoComplete={field.autoComplete}
+                  textContentType={field.textContentType}
+                  keyboardType={field.keyboardType ?? "default"}
+                  secureTextEntry={field.secure && !showPass}
+                  editable={!isFormDisabled}
+                  spellCheck={false}
+                />
+                {field.secure && (
+                  <TouchableOpacity
+                    onPress={() => setShowPass(!showPass)}
+                    disabled={isFormDisabled}
+                  >
+                    <Text style={styles.showHide}>
+                      {showPass ? "Hide" : "Show"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            ))}
+
+              {/* Password strength meter (only for password field) */}
+              {field.key === "password" &&
+                pwStrength &&
+                form.password.length > 0 && (
+                  <PasswordStrengthMeter strength={pwStrength} />
+                )}
+
+              {/* Gmail domain hint */}
+              {field.key === "gmail" &&
+                form.gmail.trim().length > 0 &&
+                !errors.gmail && (
+                  <Text
+                    style={[
+                      styles.gmailHint,
+                      {
+                        color: form.gmail
+                          .trim()
+                          .toLowerCase()
+                          .endsWith("@gmail.com")
+                          ? "#27AE60"
+                          : C.danger,
+                      },
+                    ]}
+                  >
+                    {form.gmail.trim().toLowerCase().endsWith("@gmail.com")
+                      ? "✓ Valid Gmail account"
+                      : "⚠ Must be a @gmail.com address"}
+                  </Text>
+                )}
+
+              {errors[field.key] ? (
+                <Text style={styles.errorText}>⚠ {errors[field.key]}</Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+
+        {/* Terms */}
+        <TouchableOpacity
+          onPress={() => setShowTermsModal(true)}
+          disabled={isFormDisabled}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.terms}>
+            {termsAccepted ? "Accepted: " : "Required: "}
+            <Text style={[styles.termsBold, styles.termsLink]}>
+              Terms & Privacy Policy
+            </Text>
+          </Text>
+        </TouchableOpacity>
+        {termsError ? (
+          <Text style={styles.termsError}>{termsError}</Text>
+        ) : null}
+
+        {/* CTA */}
+        <View style={styles.cta}>
+          <TouchableOpacity
+            style={[styles.signupBtn, !canSubmit && styles.btnDisabled]}
+            onPress={handleSignup}
+            activeOpacity={0.85}
+            disabled={!canSubmit}
+          >
+            {loading ? (
+              <ActivityIndicator color={C.cream} />
+            ) : (
+              <Text style={styles.signupBtnText}>Create Account</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
           </View>
 
-          {/* Terms */}
           <TouchableOpacity
-            onPress={() => setShowTermsModal(true)}
+            onPress={() => router.replace("/(auth)/login")}
             disabled={isFormDisabled}
-            activeOpacity={0.7}
           >
-            <Text style={styles.terms}>
-              {termsAccepted ? "Accepted: " : "Required: "}
-              <Text style={[styles.termsBold, styles.termsLink]}>
-                Terms & Privacy Policy
-              </Text>
+            <Text style={styles.loginLink}>
+              Already have an account?{" "}
+              <Text style={styles.loginLinkBold}>Login</Text>
             </Text>
           </TouchableOpacity>
-          {termsError ? (
-            <Text style={styles.termsError}>{termsError}</Text>
-          ) : null}
-
-          {/* CTA */}
-          <View style={styles.cta}>
-            <TouchableOpacity
-              style={[styles.signupBtn, !canSubmit && styles.btnDisabled]}
-              onPress={handleSignup}
-              activeOpacity={0.85}
-              disabled={!canSubmit}
-            >
-              {loading ? (
-                <ActivityIndicator color={C.cream} />
-              ) : (
-                <Text style={styles.signupBtnText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity
-              onPress={() => router.replace("/(auth)/login")}
-              disabled={isFormDisabled}
-            >
-              <Text style={styles.loginLink}>
-                Already have an account?{" "}
-                <Text style={styles.loginLinkBold}>Login</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+        </View>
+      </ScrollView>
 
       <TermsAndPrivacyModal
         visible={showTermsModal}
@@ -573,6 +623,11 @@ const styles = StyleSheet.create({
   inputDisabled: { opacity: 0.5 },
   input: { flex: 1, fontSize: 14, color: C.cream, fontWeight: "500" },
   showHide: { fontSize: 13, color: C.caramel, fontWeight: "600" },
+  gmailHint: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginLeft: 4,
+  },
   errorText: {
     fontSize: 12,
     color: C.danger,

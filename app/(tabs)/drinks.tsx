@@ -4,13 +4,15 @@ import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+// BUG FIX: SafeAreaView from react-native does not account for gesture
+// navigation bar insets on Android. Use useSafeAreaInsets instead.
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const SIZE_FILTERS = ["All", "Hot", "Iced", "Classic"];
 
@@ -18,6 +20,7 @@ export default function DrinksScreen() {
   const { products } = useCafe();
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState("All");
+  const insets = useSafeAreaInsets();
 
   const drinks = products
     .filter((p) => p.category === "drinks")
@@ -33,7 +36,7 @@ export default function DrinksScreen() {
         );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -118,7 +121,7 @@ export default function DrinksScreen() {
         defaultCategory="drinks"
         onClose={() => setShowAdd(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

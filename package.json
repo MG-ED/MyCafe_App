@@ -8,9 +8,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~4.0.1",
     "@expo/vector-icons": "~14.0.4",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
@@ -32,10 +33,11 @@
     "expo-location": "~18.0.10",
     "expo-network": "~7.0.5",
     "expo-router": "~4.0.22",
-    "expo-splash-screen": "~0.29.24",
+    "expo-splash-screen": "~0.29.22",
     "expo-status-bar": "~2.0.1",
     "expo-symbols": "~0.2.2",
     "expo-system-ui": "~4.0.9",
+    "expo-updates": "~0.27.5",
     "expo-web-browser": "~14.0.2",
     "firebase": "^12.12.1",
     "react": "18.3.1",
@@ -50,10 +52,17 @@
     "react-native-web": "~0.19.13"
   },
   "devDependencies": {
-    "@types/react": "~19.2.10",
-    "eslint": "^9.25.0",
-    "eslint-config-expo": "~55.0.1",
+    "@types/react": "~18.3.12",
+    "eslint": "^8.57.0",
+    "eslint-config-expo": "~8.0.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.10",
+    "postcss": "^8.5.15",
+    "tar": "^7.5.15",
+    "uuid": "^11.1.1"
   },
   "private": true
 }

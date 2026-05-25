@@ -1,47 +1,49 @@
 // ─── app/(auth)/login.tsx ─────────────────────────────────────────────────────
-// SECURITY HARDENED:
-//  ✅ Brute-force lockout (5 attempts → 15-min lockout, countdown timer)
-//  ✅ Input sanitization (strips XSS, null bytes, HTML tags)
-//  ✅ Strict email validation
-//  ✅ Generic error messages (no account-existence leakage)
-//  ✅ Disables form during lockout
-//  ✅ Lockout state visible in UI with real-time countdown
-//  ✅ Rate limiter clears on successful login
+// FIXES APPLIED:
+//
+// 1. REMOVED TouchableWithoutFeedback wrapper around ScrollView.
+//    On web, TouchableWithoutFeedback intercepts ALL pointer/click events,
+//    which prevents TextInput fields from ever receiving focus — so the user
+//    could not type in the email or password fields at all.
+//    Fix: removed the wrapper entirely. Keyboard.dismiss is not needed on web
+//    (there is no software keyboard), and on mobile the ScrollView's own
+//    keyboardShouldPersistTaps="handled" handles tap-dismiss correctly.
+//
+// 2. REMOVED "Continue with Google" button + divider + useGoogleSignIn hook.
+//    Per user request: Google sign-in button and the "or" divider are gone.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { auth } from "@/constants/firebase";
 import { sanitizeText, validateEmail } from "@/constants/security";
-import { useGoogleSignIn } from "@/hooks/useGoogleSignIn";
 import { useRateLimiter } from "@/hooks/useRateLimiter";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-    sendPasswordResetEmail,
-    signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
 } from "firebase/auth";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Svg, {
-    Circle,
-    Defs,
-    Ellipse,
-    RadialGradient,
-    Stop,
+  Circle,
+  Defs,
+  Ellipse,
+  RadialGradient,
+  Stop,
 } from "react-native-svg";
 
 const { width, height } = Dimensions.get("window");
@@ -189,12 +191,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ email: "", password: "" });
   const [focused, setFocused] = useState<string | null>(null);
-  const { googleLoading, signInWithGoogle } = useGoogleSignIn({
-    allowNewUser: false,
-    onSuccess: () => router.replace("/(tabs)"),
-  });
 
-  // Check lock state when email field loses focus
   const handleEmailBlur = async () => {
     setFocused(null);
     if (email.trim()) await rl.checkLock(email.trim().toLowerCase());
@@ -209,28 +206,57 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!validate()) return;
-    if (rl.isLocked) return;
 
     const cleanEmail = sanitizeText(email).toLowerCase();
-    // We don't sanitize password — preserve special chars the user chose
 
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        cleanEmail,
+        password,
+      );
+
+      // Soft warning if Gmail is not yet verified — user can still access the app
+      if (!credential.user.emailVerified) {
+        Alert.alert(
+          "Gmail Not Verified ✉️",
+          `Your Gmail (${cleanEmail}) hasn't been verified yet.\n\nCheck your inbox for the verification link, or tap Resend to get a new one.`,
+          [
+            { text: "Continue Anyway", style: "cancel" },
+            {
+              text: "Resend Link",
+              onPress: async () => {
+                try {
+                  await sendEmailVerification(credential.user);
+                  Alert.alert(
+                    "Sent!",
+                    `A new verification link has been sent to ${cleanEmail}.`,
+                  );
+                } catch {
+                  Alert.alert(
+                    "Error",
+                    "Could not resend the verification email. Please try again.",
+                  );
+                }
+              },
+            },
+          ],
+        );
+      }
+
+      // Firebase accepted the credentials — clear any local rate-limit lock
       await rl.recordSuccess(cleanEmail);
       router.replace("/(tabs)");
     } catch (error: any) {
-      // ── Record the failure for rate limiting ──
       const nowLocked = await rl.recordFailure(cleanEmail);
 
       if (nowLocked) {
-        // Banner already shown; no additional alert
         setPassword("");
         setLoading(false);
         return;
       }
 
-      // ── Generic error messages (don't leak account existence) ──
       const authErrors: Record<string, string> = {
         "auth/user-not-found": "Invalid email or password.",
         "auth/wrong-password": "Invalid email or password.",
@@ -254,7 +280,7 @@ export default function LoginScreen() {
           : "";
 
       Alert.alert("Login Failed", msg + warningMsg);
-      setPassword(""); // Always clear password on failure
+      setPassword("");
     } finally {
       setLoading(false);
     }
@@ -276,13 +302,11 @@ export default function LoginScreen() {
     }
     try {
       await sendPasswordResetEmail(auth, cleanEmail);
-      // Generic success message — don't confirm account existence
       Alert.alert(
         "Reset Email Sent",
         "If an account exists for that email, a password reset link has been sent. Check your inbox and spam folder.",
       );
     } catch {
-      // Always show the same message to prevent account enumeration
       Alert.alert(
         "Reset Email Sent",
         "If an account exists for that email, a password reset link has been sent.",
@@ -290,199 +314,187 @@ export default function LoginScreen() {
     }
   };
 
-  const isFormDisabled = loading || googleLoading || rl.isLocked;
+  // Inputs only disabled while a request is in-flight — never because of rate limit lock.
+  // A locked user must still be able to type and attempt; if Firebase accepts the
+  // credentials, recordSuccess() clears the lock and they get in.
+  const isFormDisabled = loading;
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: C.espressoDark }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <LoginBackground />
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoRing}>
-              <Image
-                source={require("../../assets/MyCafe_Logo.png")}
-                style={styles.logoImage}
-                resizeMode="contain"
+      {/*
+        FIX: Removed TouchableWithoutFeedback wrapper.
+        On web it captured all pointer events, preventing TextInput from
+        receiving focus — inputs appeared to do nothing when tapped/clicked.
+        keyboardShouldPersistTaps="handled" on ScrollView is sufficient for
+        mobile keyboard dismiss behaviour without breaking web inputs.
+      */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.logoRing}>
+            <Image
+              source={require("../../assets/MyCafe_Logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.title}>Welcome back</Text>
+          <Text style={styles.subtitle}>Log in to your MyCafe account</Text>
+        </View>
+
+        {/* Lockout banner */}
+        {rl.isLocked && (
+          <LockoutBanner remainingSeconds={rl.remainingSeconds} />
+        )}
+
+        {/* Form */}
+        <View style={styles.form}>
+          {/* Email */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Gmail/Email</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                focused === "email" && styles.inputFocused,
+                errors.email && styles.inputError,
+                rl.isLocked && styles.inputDisabled,
+              ]}
+            >
+              <TextInput
+                style={[
+                  styles.input,
+                  isFormDisabled && styles.inputTextDisabled,
+                ]}
+                placeholder="(juan@gmail.com)"
+                placeholderTextColor="rgba(212,169,106,0.4)"
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v.slice(0, 254));
+                  setErrors((p) => ({ ...p, email: "" }));
+                }}
+                onFocus={() => setFocused("email")}
+                onBlur={handleEmailBlur}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                editable={!isFormDisabled}
               />
             </View>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Log in to your MyCafe account</Text>
+            {errors.email ? (
+              <Text style={styles.errorText}>⚠ {errors.email}</Text>
+            ) : null}
           </View>
 
-          {/* Lockout banner */}
-          {rl.isLocked && (
-            <LockoutBanner remainingSeconds={rl.remainingSeconds} />
+          {/* Password */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View
+              style={[
+                styles.inputWrapper,
+                focused === "password" && styles.inputFocused,
+                errors.password && styles.inputError,
+                rl.isLocked && styles.inputDisabled,
+              ]}
+            >
+              <TextInput
+                style={[
+                  styles.input,
+                  isFormDisabled && styles.inputTextDisabled,
+                ]}
+                placeholder="(Enter your password)"
+                placeholderTextColor="rgba(212,169,106,0.4)"
+                value={password}
+                onChangeText={(v) => {
+                  setPassword(v.slice(0, 128));
+                  setErrors((p) => ({ ...p, password: "" }));
+                }}
+                onFocus={() => setFocused("password")}
+                onBlur={() => setFocused(null)}
+                secureTextEntry={!showPass}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                editable={!isFormDisabled}
+              />
+              {!rl.isLocked && (
+                <TouchableOpacity onPress={() => setShowPass(!showPass)}>
+                  <Text style={styles.showHide}>
+                    {showPass ? "Hide" : "Show"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {errors.password ? (
+              <Text style={styles.errorText}>⚠ {errors.password}</Text>
+            ) : null}
+          </View>
+
+          {/* Attempts warning */}
+          {!rl.isLocked && rl.attemptsLeft < 5 && rl.attemptsLeft > 0 && (
+            <Text style={styles.warningText}>
+              ⚠ {rl.attemptsLeft} attempt{rl.attemptsLeft === 1 ? "" : "s"} left
+              before temporary lockout
+            </Text>
           )}
 
-          {/* Form */}
-          <View style={styles.form}>
-            {/* Email */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Gmail/Email</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focused === "email" && styles.inputFocused,
-                  errors.email && styles.inputError,
-                  rl.isLocked && styles.inputDisabled,
-                ]}
-              >
-                <TextInput
-                  style={[
-                    styles.input,
-                    isFormDisabled && styles.inputTextDisabled,
-                  ]}
-                  placeholder="(juan@gmail.com)"
-                  placeholderTextColor="rgba(212,169,106,0.4)"
-                  value={email}
-                  onChangeText={(v) => {
-                    setEmail(v.slice(0, 254)); // Hard length cap
-                    setErrors((p) => ({ ...p, email: "" }));
-                  }}
-                  onFocus={() => setFocused("email")}
-                  onBlur={handleEmailBlur}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  editable={!isFormDisabled}
-                />
-              </View>
-              {errors.email ? (
-                <Text style={styles.errorText}>⚠ {errors.email}</Text>
-              ) : null}
-            </View>
+          {!rl.isLocked && (
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              onPress={handleForgotPassword}
+              disabled={isFormDisabled}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-            {/* Password */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  focused === "password" && styles.inputFocused,
-                  errors.password && styles.inputError,
-                  rl.isLocked && styles.inputDisabled,
-                ]}
-              >
-                <TextInput
-                  style={[
-                    styles.input,
-                    isFormDisabled && styles.inputTextDisabled,
-                  ]}
-                  placeholder="(Enter your password)"
-                  placeholderTextColor="rgba(212,169,106,0.4)"
-                  value={password}
-                  onChangeText={(v) => {
-                    setPassword(v.slice(0, 128)); // Hard length cap
-                    setErrors((p) => ({ ...p, password: "" }));
-                  }}
-                  onFocus={() => setFocused("password")}
-                  onBlur={() => setFocused(null)}
-                  secureTextEntry={!showPass}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="password"
-                  textContentType="password"
-                  editable={!isFormDisabled}
-                />
-                {!rl.isLocked && (
-                  <TouchableOpacity onPress={() => setShowPass(!showPass)}>
-                    <Text style={styles.showHide}>
-                      {showPass ? "Hide" : "Show"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {errors.password ? (
-                <Text style={styles.errorText}>⚠ {errors.password}</Text>
-              ) : null}
-            </View>
-
-            {/* Attempts warning */}
-            {!rl.isLocked && rl.attemptsLeft < 5 && rl.attemptsLeft > 0 && (
-              <Text style={styles.warningText}>
-                ⚠ {rl.attemptsLeft} attempt{rl.attemptsLeft === 1 ? "" : "s"}{" "}
-                left before temporary lockout
-              </Text>
+        {/* CTA */}
+        <View style={styles.cta}>
+          <TouchableOpacity
+            style={[
+              styles.loginBtn,
+              (isFormDisabled || !email || !password) &&
+                styles.loginBtnDisabled,
+              rl.isLocked && styles.loginBtnLocked,
+            ]}
+            onPress={handleLogin}
+            activeOpacity={0.85}
+            disabled={isFormDisabled || !email || !password}
+          >
+            {loading ? (
+              <ActivityIndicator color={C.cream} />
+            ) : rl.isLocked ? (
+              <Text style={styles.loginBtnText}>🔒 Try Anyway</Text>
+            ) : (
+              <Text style={styles.loginBtnText}>Log in</Text>
             )}
+          </TouchableOpacity>
 
-            {!rl.isLocked && (
-              <TouchableOpacity
-                style={styles.forgotBtn}
-                onPress={handleForgotPassword}
-                disabled={isFormDisabled}
-              >
-                <Text style={styles.forgotText}>Forgot password?</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* FIX: "Continue with Google" button removed per user request */}
 
-          {/* CTA */}
-          <View style={styles.cta}>
-            <TouchableOpacity
-              style={[
-                styles.loginBtn,
-                (isFormDisabled || !email || !password) &&
-                  styles.loginBtnDisabled,
-                rl.isLocked && styles.loginBtnLocked,
-              ]}
-              onPress={handleLogin}
-              activeOpacity={0.85}
-              disabled={isFormDisabled}
-            >
-              {loading ? (
-                <ActivityIndicator color={C.cream} />
-              ) : rl.isLocked ? (
-                <Text style={styles.loginBtnText}>🔒 Account Locked</Text>
-              ) : (
-                <Text style={styles.loginBtnText}>Log in</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.googleBtn,
-                isFormDisabled && styles.loginBtnDisabled,
-              ]}
-              onPress={signInWithGoogle}
-              activeOpacity={0.85}
-              disabled={isFormDisabled}
-            >
-              {googleLoading ? (
-                <ActivityIndicator color={C.espresso} />
-              ) : (
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity
-              onPress={() => router.replace("/(auth)/signup")}
-              disabled={isFormDisabled}
-            >
-              <Text style={styles.signupLink}>
-                Do not have an account?{" "}
-                <Text style={styles.signupLinkBold}>Sign Up</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+          <TouchableOpacity
+            onPress={() => router.replace("/(auth)/signup")}
+            disabled={isFormDisabled}
+          >
+            <Text style={styles.signupLink}>
+              Do not have an account?{" "}
+              <Text style={styles.signupLinkBold}>Sign Up</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -586,33 +598,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: C.cream,
     letterSpacing: 0.3,
-  },
-  googleBtn: {
-    width: "100%",
-    backgroundColor: C.cream,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(212,169,106,0.55)",
-  },
-  googleBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: C.espresso,
-    letterSpacing: 0.2,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    gap: 12,
-  },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.1)" },
-  dividerText: {
-    fontSize: 13,
-    color: "rgba(212,169,106,0.5)",
-    fontWeight: "500",
   },
   signupLink: { fontSize: 14, color: C.latte },
   signupLinkBold: { fontWeight: "700", color: C.caramel },

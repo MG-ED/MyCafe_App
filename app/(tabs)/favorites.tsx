@@ -3,16 +3,18 @@ import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import {
   Alert,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+// BUG FIX: SafeAreaView from react-native doesn't handle gesture nav bar on Android
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function FavoritesScreen() {
   const { products, favorites, toggleFavorite } = useCafe();
+  const insets = useSafeAreaInsets();
 
   const favProducts = products.filter((p) => favorites.has(p.id));
   const drinks = favProducts.filter((p) => p.category === "drinks");
@@ -30,7 +32,7 @@ export default function FavoritesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -98,7 +100,7 @@ export default function FavoritesScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

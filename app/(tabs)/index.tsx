@@ -1,10 +1,3 @@
-// ─── app/(tabs)/index.tsx ────────────────────────────────────────────────────
-// CHANGES:
-//  • ADDED Logout button in the header (top-right, next to cart icon)
-//  • Logout calls Firebase signOut, clears auth, redirects to /(auth)/welcome
-//  • FIXED unused `activeOrders` variable (was computed but never displayed)
-// ─────────────────────────────────────────────────────────────────────────────
-
 import AddProductModal from "@/components/AddProductModal";
 import OfflineBanner from "@/components/OfflineBanner";
 import ProductCard from "@/components/ProductCard";
@@ -25,14 +18,27 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function HomeScreen() {
-  const { products, favorites, cartCount, orders, cafeName, isOffline } =
-    useCafe();
+  const {
+    products,
+    favorites,
+    cartCount,
+    orders,
+    cafeName,
+    isOffline,
+    isNewProduct,
+  } = useCafe();
   const insets = useSafeAreaInsets();
   const [showAddModal, setShowAddModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
 
-  const allProducts = [...products].sort((a, b) => b.createdAt - a.createdAt);
+  // BUG FIX: allProducts was recreated on every render (new array reference)
+  // which defeated the useMemo on `recommended` below — it re-ran on every
+  // render because its allProducts dep was always a new object.
+  const allProducts = useMemo(
+    () => [...products].sort((a, b) => b.createdAt - a.createdAt),
+    [products],
+  );
   const recommended = useMemo(() => {
     const frequency = orders
       .flatMap((order) => order.items)
@@ -55,7 +61,7 @@ export default function HomeScreen() {
                 : 2
               : 2;
         const favoriteScore = favorites.has(product.id) ? 2 : 0;
-        const newScore = product.tag?.toLowerCase().includes("new") ? 1 : 0;
+        const newScore = isNewProduct(product) ? 1 : 0;
 
         return {
           product,
@@ -65,7 +71,7 @@ export default function HomeScreen() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 4)
       .map((item) => item.product);
-  }, [allProducts, favorites, orders]);
+  }, [allProducts, favorites, orders, isNewProduct]);
   const drinks = allProducts.filter((p) => p.category === "drinks");
   const snacks = allProducts.filter((p) => p.category === "snacks");
 

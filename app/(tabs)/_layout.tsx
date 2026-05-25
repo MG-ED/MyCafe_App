@@ -8,7 +8,7 @@
 
 import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import type { ComponentProps } from "react";
 import { Tabs } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,11 +19,16 @@ type TabName =
   | "snacks"
   | "favorites"
   | "profile"
-  | "orders";
+  | "orders"
+  | "cart";
+
+type ExpoTabBarProps = Parameters<
+  NonNullable<ComponentProps<typeof Tabs>["tabBar"]>
+>[0];
 
 const TAB_CONFIG: Record<
   TabName,
-  { icon: React.ComponentProps<typeof Feather>["name"]; label: string }
+  { icon: ComponentProps<typeof Feather>["name"]; label: string }
 > = {
   index: { icon: "home", label: "Home" },
   drinks: { icon: "coffee", label: "Drinks" },
@@ -31,13 +36,16 @@ const TAB_CONFIG: Record<
   favorites: { icon: "heart", label: "Favs" },
   profile: { icon: "user", label: "Profile" },
   orders: { icon: "file-text", label: "Orders" },
+  // BUG FIX: cart was missing from TAB_CONFIG — it fell back to
+  // { icon: "circle", label: "cart" } making the tab bar look broken
+  cart: { icon: "shopping-cart", label: "Cart" },
 };
 
 function CafeBottomTabBar({
   state,
   descriptors,
   navigation,
-}: BottomTabBarProps) {
+}: ExpoTabBarProps) {
   const { cartCount } = useCafe();
   // FIXED: use safe-area insets so the bar respects gesture nav bar on Android
   const insets = useSafeAreaInsets();
@@ -130,6 +138,9 @@ export default function TabLayout() {
       <Tabs.Screen name="favorites" options={{ title: "Favorites" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
       <Tabs.Screen name="orders" options={{ title: "Orders" }} />
+      {/* BUG FIX: cart screen was not declared — Expo Router requires every
+          navigable route to have a matching Tabs.Screen */}
+      <Tabs.Screen name="cart" options={{ title: "Cart" }} />
     </Tabs>
   );
 }

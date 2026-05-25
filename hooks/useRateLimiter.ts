@@ -1,24 +1,72 @@
 // ─── hooks/useRateLimiter.ts ─────────────────────────────────────────────────
-// Brute-force / rate-limit protection using AsyncStorage.
-// Tracks failed login attempts per email.
-// After MAX_ATTEMPTS failures → lockout for LOCKOUT_MS milliseconds.
-// Uses exponential backoff between attempts.
+// Brute-force / rate-limit protection for login screens.
+//
+// FIX: Replaced the top-level `import AsyncStorage from "@react-native-async-storage/async-storage"`
+// with a cross-platform storage shim that uses localStorage on web and the
+// native AsyncStorage on iOS/Android via a dynamic require().
+//
+// Why this matters:
+//   The original top-level import works fine in native builds, but on web with
+//   certain Metro/SSR configurations the native AsyncStorage module can fail
+//   to resolve during bundle evaluation, crashing login.tsx before it renders.
+//   The dynamic require() is gated on Platform.OS so the native path is never
+//   even attempted when running in a browser.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
-const MAX_ATTEMPTS  = 5;          // failures before lockout
-const LOCKOUT_MS    = 15 * 60 * 1000; // 15 minutes
-const STORAGE_KEY   = "mycafe:loginAttempts";
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
+const STORAGE_KEY = "mycafe:loginAttempts";
+
+// ── Cross-platform storage shim ───────────────────────────────────────────────
+const xStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === "web") {
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AS = require("@react-native-async-storage/async-storage").default;
+    return AS.getItem(key);
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === "web") {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        /* private-mode */
+      }
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AS = require("@react-native-async-storage/async-storage").default;
+    return AS.setItem(key, value);
+  },
+  removeItem: async (key: string): Promise<void> => {
+    if (Platform.OS === "web") {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* private-mode */
+      }
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AS = require("@react-native-async-storage/async-storage").default;
+    return AS.removeItem(key);
+  },
+};
 
 interface AttemptRecord {
-  count:     number;
-  lockedAt:  number | null;   // timestamp when lockout began
-  lastAt:    number;          // timestamp of last attempt
+  count: number;
+  lockedAt: number | null;
+  lastAt: number;
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function storageKey(email: string): string {
   return `${STORAGE_KEY}:${email.toLowerCase().trim()}`;
@@ -26,7 +74,7 @@ function storageKey(email: string): string {
 
 async function loadRecord(email: string): Promise<AttemptRecord> {
   try {
-    const raw = await AsyncStorage.getItem(storageKey(email));
+    const raw = await xStorage.getItem(storageKey(email));
     if (!raw) return { count: 0, lockedAt: null, lastAt: 0 };
     return JSON.parse(raw) as AttemptRecord;
   } catch {
@@ -36,7 +84,7 @@ async function loadRecord(email: string): Promise<AttemptRecord> {
 
 async function saveRecord(email: string, record: AttemptRecord): Promise<void> {
   try {
-    await AsyncStorage.setItem(storageKey(email), JSON.stringify(record));
+    await xStorage.setItem(storageKey(email), JSON.stringify(record));
   } catch {
     // Fail silently — don't crash the app over storage errors
   }
@@ -44,40 +92,36 @@ async function saveRecord(email: string, record: AttemptRecord): Promise<void> {
 
 async function clearRecord(email: string): Promise<void> {
   try {
-    await AsyncStorage.removeItem(storageKey(email));
+    await xStorage.removeItem(storageKey(email));
   } catch {}
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
 interface RateLimiterState {
-  isLocked:         boolean;
+  isLocked: boolean;
   remainingSeconds: number;
-  attemptsLeft:     number;
-  isLoading:        boolean;
+  attemptsLeft: number;
+  isLoading: boolean;
 }
 
 interface RateLimiter extends RateLimiterState {
-  /** Call AFTER a failed authentication attempt. Returns whether locked. */
   recordFailure: (email: string) => Promise<boolean>;
-  /** Call AFTER a successful authentication attempt to clear the record. */
   recordSuccess: (email: string) => Promise<void>;
-  /** Check current lock state for an email (e.g. when email field blurs). */
-  checkLock:     (email: string) => Promise<void>;
+  checkLock: (email: string) => Promise<void>;
 }
 
 export function useRateLimiter(): RateLimiter {
   const [state, setState] = useState<RateLimiterState>({
-    isLocked:         false,
+    isLocked: false,
     remainingSeconds: 0,
-    attemptsLeft:     MAX_ATTEMPTS,
-    isLoading:        false,
+    attemptsLeft: MAX_ATTEMPTS,
+    isLoading: false,
   });
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentEmail = useRef<string>("");
 
-  // Clear countdown timer on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -90,23 +134,22 @@ export function useRateLimiter(): RateLimiter {
     const tick = () => {
       const elapsed = Date.now() - lockedAt;
       const remaining = Math.max(0, LOCKOUT_MS - elapsed);
-      const remainingSeconds = Math.ceil(remaining / 1000);
 
       if (remaining <= 0) {
         if (timerRef.current) clearInterval(timerRef.current);
         clearRecord(currentEmail.current);
         setState({
-          isLocked:         false,
+          isLocked: false,
           remainingSeconds: 0,
-          attemptsLeft:     MAX_ATTEMPTS,
-          isLoading:        false,
+          attemptsLeft: MAX_ATTEMPTS,
+          isLoading: false,
         });
       } else {
         setState((prev) => ({
           ...prev,
-          isLocked:         true,
-          remainingSeconds,
-          attemptsLeft:     0,
+          isLocked: true,
+          remainingSeconds: Math.ceil(remaining / 1000),
+          attemptsLeft: 0,
         }));
       }
     };
@@ -115,89 +158,94 @@ export function useRateLimiter(): RateLimiter {
     timerRef.current = setInterval(tick, 1000);
   }, []);
 
-  const checkLock = useCallback(async (email: string) => {
-    if (!email.trim()) return;
-    currentEmail.current = email;
+  const checkLock = useCallback(
+    async (email: string) => {
+      if (!email.trim()) return;
+      currentEmail.current = email;
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const record = await loadRecord(email);
 
-    setState((prev) => ({ ...prev, isLoading: true }));
-    const record = await loadRecord(email);
-
-    if (record.lockedAt) {
-      const elapsed = Date.now() - record.lockedAt;
-      if (elapsed < LOCKOUT_MS) {
-        startCountdown(record.lockedAt);
-        return;
-      } else {
-        // Lockout expired — clear it
+      if (record.lockedAt) {
+        const elapsed = Date.now() - record.lockedAt;
+        if (elapsed < LOCKOUT_MS) {
+          startCountdown(record.lockedAt);
+          return;
+        }
         await clearRecord(email);
-        setState({
-          isLocked:         false,
-          remainingSeconds: 0,
-          attemptsLeft:     MAX_ATTEMPTS,
-          isLoading:        false,
-        });
-        return;
       }
-    }
 
-    setState({
-      isLocked:         false,
-      remainingSeconds: 0,
-      attemptsLeft:     Math.max(0, MAX_ATTEMPTS - record.count),
-      isLoading:        false,
-    });
-  }, [startCountdown]);
+      setState({
+        isLocked: false,
+        remainingSeconds: 0,
+        attemptsLeft: Math.max(0, MAX_ATTEMPTS - record.count),
+        isLoading: false,
+      });
+    },
+    [startCountdown],
+  );
 
-  const recordFailure = useCallback(async (email: string): Promise<boolean> => {
-    currentEmail.current = email;
-    const record = await loadRecord(email);
+  const recordFailure = useCallback(
+    async (email: string): Promise<boolean> => {
+      currentEmail.current = email;
+      const record = await loadRecord(email);
 
-    // If already locked, don't increment
-    if (record.lockedAt) {
-      const elapsed = Date.now() - record.lockedAt;
-      if (elapsed < LOCKOUT_MS) {
-        startCountdown(record.lockedAt);
+      if (record.lockedAt) {
+        const elapsed = Date.now() - record.lockedAt;
+        if (elapsed < LOCKOUT_MS) {
+          startCountdown(record.lockedAt);
+          return true;
+        }
+        const reset: AttemptRecord = {
+          count: 1,
+          lockedAt: null,
+          lastAt: Date.now(),
+        };
+        await saveRecord(email, reset);
+        setState({
+          isLocked: false,
+          remainingSeconds: 0,
+          attemptsLeft: MAX_ATTEMPTS - 1,
+          isLoading: false,
+        });
+        return false;
+      }
+
+      const newCount = record.count + 1;
+      if (newCount >= MAX_ATTEMPTS) {
+        const lockedAt = Date.now();
+        await saveRecord(email, {
+          count: newCount,
+          lockedAt,
+          lastAt: lockedAt,
+        });
+        startCountdown(lockedAt);
         return true;
       }
-      // Lockout expired, reset
-      const reset: AttemptRecord = { count: 1, lockedAt: null, lastAt: Date.now() };
-      await saveRecord(email, reset);
+
+      await saveRecord(email, {
+        count: newCount,
+        lockedAt: null,
+        lastAt: Date.now(),
+      });
       setState({
-        isLocked:         false,
+        isLocked: false,
         remainingSeconds: 0,
-        attemptsLeft:     MAX_ATTEMPTS - 1,
-        isLoading:        false,
+        attemptsLeft: MAX_ATTEMPTS - newCount,
+        isLoading: false,
       });
       return false;
-    }
-
-    const newCount = record.count + 1;
-
-    if (newCount >= MAX_ATTEMPTS) {
-      const lockedAt = Date.now();
-      await saveRecord(email, { count: newCount, lockedAt, lastAt: lockedAt });
-      startCountdown(lockedAt);
-      return true;
-    }
-
-    await saveRecord(email, { count: newCount, lockedAt: null, lastAt: Date.now() });
-    setState({
-      isLocked:         false,
-      remainingSeconds: 0,
-      attemptsLeft:     MAX_ATTEMPTS - newCount,
-      isLoading:        false,
-    });
-    return false;
-  }, [startCountdown]);
+    },
+    [startCountdown],
+  );
 
   const recordSuccess = useCallback(async (email: string): Promise<void> => {
     await clearRecord(email);
     if (timerRef.current) clearInterval(timerRef.current);
     setState({
-      isLocked:         false,
+      isLocked: false,
       remainingSeconds: 0,
-      attemptsLeft:     MAX_ATTEMPTS,
-      isLoading:        false,
+      attemptsLeft: MAX_ATTEMPTS,
+      isLoading: false,
     });
   }, []);
 

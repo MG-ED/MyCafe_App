@@ -4,13 +4,14 @@ import { useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+// BUG FIX: SafeAreaView from react-native doesn't handle gesture nav bar on Android
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const CATEGORIES = ["All", "Cake", "Sandwich", "Cookies"];
 
@@ -18,6 +19,7 @@ export default function SnacksScreen() {
   const { products } = useCafe();
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState("All");
+  const insets = useSafeAreaInsets();
 
   const snacks = products
     .filter((p) => p.category === "snacks")
@@ -33,7 +35,7 @@ export default function SnacksScreen() {
         );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -115,7 +117,7 @@ export default function SnacksScreen() {
         defaultCategory="snacks"
         onClose={() => setShowAdd(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -11,16 +11,45 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get, list: if isOwner(userId);
-      allow create, update, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        // BUG FIX: Validate field types on write to prevent malformed documents
+        // from being stored (e.g. via a compromised client or API abuse).
+        && (!("cafeName" in request.resource.data)
+            || request.resource.data.cafeName is string)
+        && (!("cafeName" in request.resource.data)
+            || request.resource.data.cafeName.size() <= 80);
+      allow delete: if isOwner(userId);
 
       match /products/{productId} {
         allow get, list: if isOwner(userId);
-        allow create, update, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          // Require the essential fields and validate their types
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.price is number
+          && request.resource.data.price >= 0
+          && request.resource.data.price <= 100000
+          && request.resource.data.category in ["drinks", "snacks"]
+          // Prevent arbitrarily large image strings in Firestore documents
+          && (!("imageUri" in request.resource.data)
+              || request.resource.data.imageUri.size() <= 500);
+        allow delete: if isOwner(userId);
       }
 
       match /orders/{orderId} {
         allow get, list: if isOwner(userId);
-        allow create, update, delete: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.customerName is string
+          && request.resource.data.customerName.size() > 0
+          && request.resource.data.customerName.size() <= 80
+          && request.resource.data.total is number
+          && request.resource.data.total >= 0
+          && request.resource.data.status == "Pending";
+        allow update: if isOwner(userId)
+          // Only allow status updates through the app's valid workflow
+          && request.resource.data.status in ["Pending", "Preparing", "Ready", "Done"];
+        allow delete: if isOwner(userId);
       }
     }
   }

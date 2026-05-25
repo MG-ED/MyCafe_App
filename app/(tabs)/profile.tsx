@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,8 +23,14 @@ import MapView, { Marker } from "react-native-maps";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { orders, products, isOffline, uploadProfilePhoto, userProfile } =
-    useCafe();
+  const {
+    orders,
+    products,
+    isOffline,
+    uploadProfilePhoto,
+    userProfile,
+    isNewProduct,
+  } = useCafe();
   const [user, setUser] = useState<User | null>(auth.currentUser);
   const [location, setLocation] = useState<Location.LocationObject | null>(
     null,
@@ -129,16 +136,14 @@ export default function ProfileScreen() {
               : 1;
         return {
           product,
-          score:
-            base * 3 +
-            timeBoost +
-            (product.tag?.toLowerCase().includes("new") ? 1 : 0),
+          score: base * 3 + timeBoost + (isNewProduct(product) ? 1 : 0),
         };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map((item) => item.product);
-  }, [orders, products]);
+    // BUG FIX: isNewProduct was used inside the memo but missing from the deps array.
+  }, [orders, products, isNewProduct]);
 
   useEffect(() => {
     setProfilePicError(false);
@@ -146,6 +151,7 @@ export default function ProfileScreen() {
 
   const handlePhotoCapture = async (uri: string) => {
     try {
+      setProfilePicError(false); // Optimistically clear error before upload
       await uploadProfilePhoto(uri);
       Alert.alert("Profile Updated", "Your profile picture has been uploaded.");
     } catch {
@@ -166,7 +172,9 @@ export default function ProfileScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      // BUG FIX: MediaTypeOptions is deprecated in expo-image-picker 16.x (SDK 52).
+      // Use the new string-array API instead.
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -237,14 +245,16 @@ export default function ProfileScreen() {
           </Text>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setShowCamera(true)}
-              activeOpacity={0.85}
-            >
-              <Feather name="camera" size={18} color="#FFF5E4" />
-              <Text style={styles.actionText}>Take Photo</Text>
-            </TouchableOpacity>
+            {Platform.OS !== "web" && (
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => setShowCamera(true)}
+                activeOpacity={0.85}
+              >
+                <Feather name="camera" size={18} color="#FFF5E4" />
+                <Text style={styles.actionText}>Take Photo</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.actionBtnOutline}
               onPress={handlePickImage}

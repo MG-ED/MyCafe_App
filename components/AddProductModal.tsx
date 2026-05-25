@@ -1,17 +1,7 @@
-// ─── AddProductModal.tsx ─────────────────────────────────────────────────────
-// CHANGES:
-//  • REPLACED emoji picker with a real image upload (expo-image-picker)
-//  • Image shown in preview card and saved as imageUri on the product
-//  • Added file-type validation (JPG / PNG only via mediaTypes filter)
-//  • Added permission request with graceful denial message
-//  • FIXED tag duplication bug — both branches used identical string "🆕 New"
-//  • Reset imageUri state on modal close so stale image doesn't reappear
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { ProductCategory, useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -60,11 +50,15 @@ export default function AddProductModal({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState<ProductCategory>(defaultCategory);
-  const [selectedColor, setSelectedColor] = useState(DRINK_COLORS[0]);
+  const [selectedColor, setSelectedColor] = useState(
+    defaultCategory === "drinks" ? DRINK_COLORS[0] : SNACK_COLORS[0],
+  );
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   // Sub-tag: lets the filter chips in Snacks/Drinks actually work
-  const [subTag, setSubTag] = useState<string>("Hot");
+  const [subTag, setSubTag] = useState<string>(
+    defaultCategory === "drinks" ? "Hot" : "Cake",
+  );
 
   const DRINK_TAGS = ["Hot", "Iced", "Classic"];
   const SNACK_TAGS = ["Cake", "Sandwich", "Cookies"];
@@ -94,7 +88,9 @@ export default function AddProductModal({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         // Only allow photos (JPG / PNG — no videos)
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        // BUG FIX: MediaTypeOptions is deprecated in expo-image-picker 16.x (SDK 52).
+        // Use the new string-array API instead.
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1], // square crop for consistent card display
         quality: 0.8, // compress slightly to keep memory low
@@ -145,6 +141,20 @@ export default function AddProductModal({
   const handleRemoveImage = () => {
     setImageUri(null);
   };
+
+  // Reset modal fields whenever it opens or the default category changes.
+  // This ensures Drinks and Snacks screens both open the modal with the right state.
+  useEffect(() => {
+    if (!visible) return;
+    setName("");
+    setPrice("");
+    setImageUri(null);
+    setCategory(defaultCategory);
+    setSelectedColor(
+      defaultCategory === "drinks" ? DRINK_COLORS[0] : SNACK_COLORS[0],
+    );
+    setSubTag(defaultCategory === "drinks" ? "Hot" : "Cake");
+  }, [visible, defaultCategory]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = () => {

@@ -1,13 +1,6 @@
-// ─── components/ProductCard.tsx ───────────────────────────────────────────────
-// FIXED:
-//  • "New" tag badge only shows if product was created within the last 24 hours
-//    — uses isNewProduct() from CafeContext (checks Date.now() - createdAt < 24h)
-//  • Quantity stepper replaces + button when item is already in cart
-//  • Correct CartItem shape (item.product.id)
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { Product, useCafe } from "@/context/CafeContext";
 import { Feather } from "@expo/vector-icons";
+import { memo, useState } from "react";
 import {
   Alert,
   Image,
@@ -24,7 +17,7 @@ interface Props {
 
 const DEFAULT_SIZE = "Regular";
 
-export default function ProductCard({ product, compact = false }: Props) {
+function ProductCardInner({ product, compact = false }: Props) {
   const {
     addToCart,
     updateCartQuantity,
@@ -34,6 +27,10 @@ export default function ProductCard({ product, compact = false }: Props) {
     cart,
     isNewProduct,
   } = useCafe();
+
+  // BUG FIX: Track image load errors so we can fall back to the emoji when the
+  // stored URL is broken (e.g. the image was deleted from Storage).
+  const [imageError, setImageError] = useState(false);
 
   const isFav = favorites.has(product.id);
 
@@ -61,6 +58,9 @@ export default function ProductCard({ product, compact = false }: Props) {
     ]);
   };
 
+  // Show image only if we have a URI and it hasn't errored
+  const showImage = !!product.imageUri && !imageError;
+
   // ── Compact card (horizontal scroll) ────────────────────────────────────
   if (compact) {
     return (
@@ -85,11 +85,12 @@ export default function ProductCard({ product, compact = false }: Props) {
           />
         </TouchableOpacity>
 
-        {product.imageUri ? (
+        {showImage ? (
           <Image
             source={{ uri: product.imageUri }}
             style={styles.compactImage}
             resizeMode="cover"
+            onError={() => setImageError(true)}
           />
         ) : (
           <Text style={styles.compactEmoji}>{product.emoji}</Text>
@@ -168,11 +169,12 @@ export default function ProductCard({ product, compact = false }: Props) {
         </View>
       </View>
 
-      {product.imageUri ? (
+      {showImage ? (
         <Image
           source={{ uri: product.imageUri }}
           style={styles.image}
           resizeMode="cover"
+          onError={() => setImageError(true)}
         />
       ) : (
         <Text style={styles.emoji}>{product.emoji}</Text>
@@ -209,6 +211,12 @@ export default function ProductCard({ product, compact = false }: Props) {
     </View>
   );
 }
+
+// BUG FIX: memo prevents ProductCard from re-rendering when unrelated context
+// values change (e.g. syncPending flipping true→false, cafeName changing).
+// Without this, adding a product to the cart caused ALL cards on the screen
+// to re-render simultaneously.
+export default memo(ProductCardInner);
 
 const styles = StyleSheet.create({
   // ── Full card ──────────────────────────────────────────────────────────────
