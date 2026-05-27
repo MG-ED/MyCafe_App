@@ -4,40 +4,47 @@
     "slug": "MyCAFE",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/MyCafe_Logo.png",
+    "icon": "./assets/Logo.png",
     "scheme": "mycafe",
     "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/Logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mycafe.pos"
     },
     "android": {
       "package": "com.mycafe.pos",
       "googleServicesFile": "./google-services.json",
-      "newArchEnabled": false,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/MyCafe_Logo.png",
+        "foregroundImage": "./assets/Logo.png",
+        "monochromeImage": "./assets/Logo.png",
         "backgroundColor": "#ffffff"
       }
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/MyCafe_Logo.png"
+      "favicon": "./assets/Logo.png"
     },
     "plugins": [
       "expo-router",
+      "expo-font",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/MyCafe_Logo.png",
-          "imageWidth": 200,
-          "resizeMode": "contain"
+          "image": "./assets/Logo.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ],
-      "expo-font"
+      "react-native-reanimated"
     ],
     "extra": {
       "googleWebClientId": "465844142916-20d1vkepbovt7p8nrra0v127vq106052.apps.googleusercontent.com",
-      "googleIosClientId": "",
       "googleAndroidClientId": "465844142916-e4porib0dpeon6ihbf64evvh7v0v8n82.apps.googleusercontent.com",
       "router": {
         "origin": false
@@ -48,12 +55,6 @@
     },
     "experiments": {
       "typedRoutes": true
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/09dae096-878d-4ebb-bb32-0b4940942dc1"
     }
   }
 }

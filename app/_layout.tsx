@@ -1,21 +1,3 @@
-// ─── app/_layout.tsx ──────────────────────────────────────────────────────────
-// FIX: Removed useAuthGuard() entirely.
-//
-// The original code had TWO independent systems both watching Firebase auth
-// state and calling router.replace() simultaneously:
-//   1. useAuthGuard() here in the root layout
-//   2. The onAuthStateChanged listener in app/index.tsx
-//
-// On web, when Firebase resolves quickly (no cached session), both effects
-// fired in the same tick. Expo Router's web implementation cannot handle two
-// competing replace() calls during initial hydration — the router ends up in
-// an indeterminate blank state and nothing is rendered.
-//
-// Navigation responsibility is now clearly split:
-//   • app/index.tsx  → shows splash → navigates to /(auth)/welcome or /(tabs)
-//   • app/(tabs)/*   → handles tab-level auth (e.g. sign-out redirects)
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { CafeProvider } from "@/context/CafeContext";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -23,9 +5,6 @@ import React from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-// ── Root Error Boundary ───────────────────────────────────────────────────────
-// Catches any render-phase exception inside the tree so a crash shows a readable
-// message instead of a blank white screen.
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: Error | null }
