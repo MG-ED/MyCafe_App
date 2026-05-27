@@ -463,8 +463,8 @@ Scan the QR code shown in the terminal with Expo Go.
 
 ## Authors
 
-**Estrabela, Edison D.** — Sorsogon State University, BSCS
-**Larosa, Marvin E.** — Sorsogon State University, BSCS
+**Estrabela, Edison D.** — Sorsogon State University, BSCS 3rd yr
+**Larosa, Marvin E.** — Sorsogon State University, BSCS 3rd yr
 
 **Course:** Application Development & Emerging Technologies 2 (ADET 2)  
 **Instructor:** Ceilo F. Gabotero  
