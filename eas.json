@@ -1,17 +1,45 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 13.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "NPM_CONFIG_FORCE": "true"
+        "EXPO_IMAGE_UTILS_NO_SHARP": "1",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDk8mH0KyPqUrBj5DKTleC1afQD2f_Kx0Y",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "mycafe-pos-b8fbd.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "mycafe-pos-b8fbd",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "mycafe-pos-b8fbd.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "536703139609",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:536703139609:web:bd32c184e3d9d655888f88",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-MS30T627NP"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_IMAGE_UTILS_NO_SHARP": "1",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyDk8mH0KyPqUrBj5DKTleC1afQD2f_Kx0Y",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "mycafe-pos-b8fbd.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "mycafe-pos-b8fbd",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "mycafe-pos-b8fbd.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "536703139609",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:536703139609:web:bd32c184e3d9d655888f88",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-MS30T627NP"
       }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }
